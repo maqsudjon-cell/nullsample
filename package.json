@@ -1,0 +1,29 @@
+{
+  "name": "nullsample",
+  "version": "1.0.0",
+  "description": "Procedural music generator. Original tracks synthesized entirely from code. Zero samples.",
+  "type": "module",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "render": "node cli/render.ts",
+    "batch": "node cli/batch.ts",
+    "sheet": "node cli/sheet.ts",
+    "narrow": "node cli/narrow.ts",
+    "stems": "node cli/stems.ts",
+    "bench": "node cli/bench.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "node tools/lint-determinism.mjs",
+    "test": "node --test 'test/*.test.ts'",
+    "test:browser": "node test/browser-determinism.mjs",
+    "brand": "node brand/build-brand.mjs",
+    "build": "node tools/build-web.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "puppeteer-core": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}

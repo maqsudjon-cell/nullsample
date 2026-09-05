@@ -1,0 +1,7 @@
+node_modules/
+dist/
+batch/
+*.wav
+!test/golden/*.wav
+.DS_Store
+*.log
