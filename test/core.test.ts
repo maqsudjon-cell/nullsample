@@ -9,7 +9,7 @@ import { makeRng, normaliseSeed, Rng } from "../core/rng.ts";
 import { Pulse, Saw, Sine, Supersaw, Triangle, WhiteNoise, PinkNoise, polyBlep } from "../core/osc.ts";
 import { Adsr, ExpDecay, renderSegments } from "../core/env.ts";
 import { Biquad, DcBlocker, OnePole, Svf } from "../core/filter.ts";
-import { AdaaClipper, Bitcrush, DistortionChain, Oversampler4x, kaiserLowpass, softClip, waveshape, hardClip } from "../core/shape.ts";
+import { AdaaClipper, Bitcrush, DistortionChain, Oversampler4x, kaiserLowpass, softClip, waveshape, waveshapeOffset, hardClip } from "../core/shape.ts";
 import { Chorus, DelayLine, Haas, StereoDelay } from "../core/delay.ts";
 import { Reverb } from "../core/reverb.ts";
 import { buildDuckCurve, Compressor, EnvelopeFollower, Limiter, peakMono } from "../core/dynamics.ts";
@@ -377,7 +377,12 @@ test("shape: saturators are bounded, odd and unity-slope at zero", () => {
   assert.equal(hardClip(2, 0.5), 0.5);
   assert.equal(hardClip(-2, 0.5), -0.5);
   assert.equal(hardClip(0.1, 0.5), 0.1);
-  for (const x of [-3, -1, 0, 1, 3]) assert.ok(Number.isFinite(waveshape(x, 0.5, 0.1)));
+  for (const x of [-3, -1, 0, 1, 3]) assert.ok(Number.isFinite(waveshape(x, 0.5, 0.1, waveshapeOffset(0.1))));
+  // zero in must give zero out at every bias, or the shaper emits DC
+  for (const bias of [0, 0.05, 0.18, -0.1]) {
+    const y = waveshape(0, 0.4, bias, waveshapeOffset(bias));
+    assert.ok(Math.abs(y) < 1e-15, `waveshape(0) with bias ${bias} returned ${y}`);
+  }
 });
 
 test("shape: the ADAA clipper still clips", () => {

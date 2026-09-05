@@ -1,0 +1,31 @@
+{
+  "preset": "hyperpop",
+  "rangesVersion": 1,
+  "sampleRate": 44100,
+  "tracks": {
+    "7": {
+      "sha256": "b08ea5af4fe552ce387ce0c19e312109f72bf6e8d58dc721f2920086c92287bd",
+      "bytes": 20429108,
+      "bars": 72,
+      "tempo": 152.5,
+      "peakDb": -0.901,
+      "rmsDb": -10.0443
+    },
+    "12345": {
+      "sha256": "9befddcf9b0ea0eaceb33a16b5b1956a219c167c74131957f3475f357bf90c33",
+      "bytes": 21891284,
+      "bars": 76,
+      "tempo": 150,
+      "peakDb": -0.8691,
+      "rmsDb": -8.5861
+    },
+    "hello": {
+      "sha256": "8c039bf470d58164951b94f5e8be696008825ae175757e46c299e0d273e63c5c",
+      "bytes": 20694932,
+      "bars": 72,
+      "tempo": 150.5,
+      "peakDb": -0.8377,
+      "rmsDb": -10.0948
+    }
+  }
+}

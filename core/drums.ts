@@ -11,7 +11,7 @@ import { dexp, midiToHz } from "./dmath.ts";
 import { DcBlocker, Svf } from "./filter.ts";
 import { Pulse, Sine } from "./osc.ts";
 import type { Rng } from "./rng.ts";
-import { softClip, waveshape } from "./shape.ts";
+import { softClip } from "./shape.ts";
 
 export interface KickParams {
   startHz: number;
@@ -284,4 +284,4 @@ function fadeTail(buf: Float32Array, len: number): void {
   }
 }
 
-export { midiToHz, waveshape };
+export { midiToHz };

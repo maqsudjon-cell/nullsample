@@ -21,6 +21,7 @@ const PRIMES = [
 export class Reverb {
   private lines: DelayLine[] = [];
   private lens: Float64Array;
+  private scaled: Float64Array;
   private gains: Float64Array;
   private damp: Float64Array;
   private diff: DelayLine[] = [];
@@ -29,6 +30,9 @@ export class Reverb {
   private tmp: Float64Array;
   private sr: number;
   private preDelay: DelayLine;
+  private silentRun = 0;
+  private flushed = false;
+  private flushAfter = 44100 * 8;
 
   /** RT60 in seconds. */
   decay = 2.2;
@@ -41,6 +45,7 @@ export class Reverb {
   constructor(sampleRate: number, seedOffset = 0) {
     this.sr = sampleRate;
     this.lens = new Float64Array(8);
+    this.scaled = new Float64Array(8);
     this.gains = new Float64Array(8);
     this.damp = new Float64Array(8);
     this.state = new Float64Array(8);
@@ -60,9 +65,16 @@ export class Reverb {
   update(): void {
     const scale = (this.size * this.sr) / 44100;
     for (let i = 0; i < 8; i++) {
-      const len = this.lens[i] * scale;
+      // Rounded to whole samples: a fractional tap would cost a cubic
+      // interpolation on every line on every sample, and sub-sample precision
+      // on a reverb line length is inaudible - it shifts a mode by a fraction
+      // of a hertz.
+      this.scaled[i] = Math.round(this.lens[i] * scale);
+      const len = this.scaled[i];
       // per-line gain so every line reaches -60 dB at the same wall-clock time
       this.gains[i] = dpow(10, (-3 * len) / (this.decay * this.sr));
+      // four times the decay puts the tail 240 dB down
+      this.flushAfter = Math.ceil(this.decay * this.sr * 4);
       this.damp[i] = dexp(-6.283185307179586 * (800 + 9000 * this.brightness) / this.sr);
     }
   }
@@ -72,10 +84,32 @@ export class Reverb {
     for (const d of this.diff) d.reset();
     this.preDelay.reset();
     this.state.fill(0);
+    this.silentRun = 0;
+    this.flushed = false;
   }
 
   /** Mono in, stereo out. Wet only. */
   process(x: number, out: Float64Array): void {
+    // A reverb fed silence for several times its own decay holds energy far
+    // below the last bit of a 24-bit sample. Flushing the network then and
+    // skipping is a fixed, reproducible rule, so it costs nothing in
+    // determinism and saves running eight delay lines through every silent
+    // bar of the arrangement.
+    if (x === 0) {
+      this.silentRun++;
+      if (this.silentRun > this.flushAfter) {
+        if (!this.flushed) {
+          this.reset();
+          this.flushed = true;
+        }
+        out[0] = 0;
+        out[1] = 0;
+        return;
+      }
+    } else {
+      this.silentRun = 0;
+      this.flushed = false;
+    }
     this.preDelay.write(x);
     let v = this.preDelay.read(this.preDelaySeconds * this.sr);
 
@@ -88,10 +122,9 @@ export class Reverb {
       v = del - inp * 0.5;
     }
 
-    const scale = (this.size * this.sr) / 44100;
     const tmp = this.tmp;
     for (let i = 0; i < 8; i++) {
-      const y = this.lines[i].read(this.lens[i] * scale);
+      const y = this.lines[i].read(this.scaled[i]);
       // one-pole damping inside the loop
       const a = this.damp[i];
       this.state[i] = y + a * (this.state[i] - y);

@@ -78,8 +78,11 @@ export class StereoDelay {
 
   /** Returns the wet signal only; the caller decides the mix. */
   process(inL: number, inR: number, out: Float64Array): void {
-    const tl = this.timeL * this.sr;
-    const tr = this.timeR * this.sr;
+    // Rounded to whole samples. A tempo-locked echo does not need sub-sample
+    // placement, and the fractional path costs a cubic interpolation on every
+    // sample of the track - which measured at 1.3 s of a 21 s render.
+    const tl = Math.round(this.timeL * this.sr);
+    const tr = Math.round(this.timeR * this.sr);
     const yl = this.dl.read(tl);
     const yr = this.dr.read(tr);
     const a = 1 - this.damping;
