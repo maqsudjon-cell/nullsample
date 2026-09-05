@@ -42,7 +42,10 @@ const rows = index.records.map((r, i) => ({
   tempo: Math.round(r.tempo),
   bars: r.bars,
   dur: r.durationSeconds,
-  rms: r.rmsDb,
+  dropRms: r.dropRmsDb,
+  crest: r.crestDb,
+  hot: r.overCompressed,
+  integrated: r.integratedRmsDb,
   headline: HEADLINE.map((k) => [k, r.params[k]] as const).filter(([, v]) => v !== undefined),
 }));
 
@@ -88,6 +91,7 @@ const html = `<!doctype html>
   .meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
   .meta b { font-weight: 500; }
   .params { color: var(--dim); font-size: 11px; }
+  .warn { color: var(--flare); }
   audio { width: 100%; height: 30px; }
   .rate { display: flex; gap: 4px; }
   .rate button { width: 26px; padding: 4px 0; text-align: center; }
@@ -109,6 +113,8 @@ const html = `<!doctype html>
   <span class="dim">ranges v${index.rangesVersion}</span>
   <span class="dim"><span class="count" id="done">0</span> of ${rows.length} rated</span>
   <span class="dim"><kbd>1</kbd>&ndash;<kbd>5</kbd> rate &middot; <kbd>space</kbd> play &middot; <kbd>j</kbd>/<kbd>k</kbd> move</span>
+  <span class="dim">drop = short-term RMS in the drops, the number with a target (&minus;7 to &minus;8).
+  int = whole-file RMS, information only. crest under 6 dB is over-compressed.</span>
 </header>
 <main id="list"></main>
 <footer>
@@ -134,7 +140,10 @@ list.innerHTML = ROWS.map(function (r) {
     '<div class="n">' + String(r.i).padStart(3, "0") + '</div>' +
     '<div><div class="meta"><b>' + r.key + '</b><span class="dim">' + r.tempo + ' BPM</span>' +
       '<span class="dim">' + r.arrangement + '</span><span class="dim">' + r.bars + ' bars</span>' +
-      '<span class="dim">' + r.dur.toFixed(0) + 's</span><span class="dim">rms ' + r.rms.toFixed(1) + '</span></div>' +
+      '<span class="dim">' + r.dur.toFixed(0) + 's</span>' +
+      '<span class="' + (r.hot ? 'warn' : 'dim') + '">drop ' + r.dropRms.toFixed(1) + ' dB</span>' +
+      '<span class="' + (r.hot ? 'warn' : 'dim') + '">crest ' + r.crest.toFixed(1) + (r.hot ? ' OVER' : '') + '</span>' +
+      '<span class="dim" title="whole-file RMS, information only">int ' + r.integrated.toFixed(1) + '</span></div>' +
       '<div class="params">' + params + '</div></div>' +
     '<div><audio preload="none" controls src="./' + r.file + '"></audio></div>' +
     '<div class="rate" role="group" aria-label="rating for track ' + r.i + '">' +

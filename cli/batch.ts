@@ -11,6 +11,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getPreset } from "../presets/index.ts";
+import { analyseLoudness } from "../render/loudness.ts";
 import { renderTrack } from "../render/track.ts";
 import { encodeWav } from "../render/wav.ts";
 import { num, parseArgs, str } from "./args.ts";
@@ -24,8 +25,14 @@ export interface BatchRecord {
   arrangement: string;
   bars: number;
   durationSeconds: number;
+  /** Maximum short-term RMS inside the drops. The number with a target. */
+  dropRmsDb: number;
+  /** Whole-file RMS. Information only — it averages the quiet sections in. */
+  integratedRmsDb: number;
+  truePeakDb: number;
   peakDb: number;
-  rmsDb: number;
+  crestDb: number;
+  overCompressed: boolean;
   params: Record<string, number>;
   choices: Record<string, string>;
 }
@@ -59,6 +66,7 @@ for (let i = 0; i < count; i++) {
   const file = `track-${String(i + 1).padStart(4, "0")}.wav`;
   writeFileSync(join(outDir, file), encodeWav(result.audio, 16));
   const p = result.plan;
+  const loud = analyseLoudness(result.audio, p.sections);
   records.push({
     seed,
     file,
@@ -68,15 +76,19 @@ for (let i = 0; i < count; i++) {
     arrangement: p.arrangement.templateName,
     bars: p.bars,
     durationSeconds: result.stats.durationSeconds,
-    peakDb: result.stats.peakDb,
-    rmsDb: result.stats.rmsDb,
+    dropRmsDb: loud.dropRmsDb,
+    integratedRmsDb: loud.integratedRmsDb,
+    truePeakDb: loud.truePeakDb,
+    peakDb: loud.peakDb,
+    crestDb: loud.crestDb,
+    overCompressed: loud.overCompressed,
     params: p.params,
     choices: p.choices,
   });
   const elapsed = (Date.now() - started) / 1000;
   const eta = (elapsed / (i + 1)) * (count - i - 1);
   process.stderr.write(
-    `\r  ${i + 1}/${count}  ${seed}  ${p.tempo.toFixed(0)} BPM  eta ${eta.toFixed(0)}s   `,
+    `\r  ${i + 1}/${count}  ${seed}  ${p.tempo.toFixed(0)} BPM  drop ${loud.dropRmsDb.toFixed(1)} dB  crest ${loud.crestDb.toFixed(1)}${loud.overCompressed ? "!" : " "}  eta ${eta.toFixed(0)}s   `,
   );
 }
 process.stderr.write("\r" + " ".repeat(60) + "\r");

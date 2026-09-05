@@ -241,8 +241,23 @@ reconstruct above it, and a lossy encoder will clip that.
 Everything below 120 Hz stays mono. Width comes from detuned leads, chorus, and
 light Haas in mids and highs only.
 
-Target −0.5 to −1.2 dBTP peak, −7 to −8 dBFS RMS, kick and snare transients
-still punching.
+Target −0.5 to −1.2 dBTP peak, and **−7 to −8 dBFS short-term RMS measured over
+the loudest sustained section**, with kick and snare transients still punching.
+
+Loudness is measured on a 3-second sliding window, and the reported figure is
+the maximum such window that sits entirely inside a drop section — never a
+window straddling the edge of one. Integrated whole-file RMS is reported
+separately, as information, **with no target attached to it**.
+
+This distinction is not pedantry. Integrated RMS averages the quiet intro and
+the breakdown in with the drops, so any arrangement with real dynamics reads
+low; one seed measured −11.3 dBFS integrated while its drops were at −8.7.
+Raising the makeup gain to chase that average would flatten the track and
+destroy exactly the transients this section exists to protect.
+
+Report **crest factor** (true peak minus drop RMS) per track. Below about 6 dB
+the master is over-compressed regardless of what the RMS figure says, and that
+is a defect whatever the loudness reads.
 
 Write WAV yourself: 44-byte RIFF header plus interleaved samples. No audio
 library. Identical code path in Node and browser.

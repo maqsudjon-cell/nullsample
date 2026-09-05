@@ -7,6 +7,7 @@
 
 import { writeFileSync } from "node:fs";
 import { getPreset } from "../presets/index.ts";
+import { analyseLoudness, CREST_FLOOR_DB } from "../render/loudness.ts";
 import { renderTrack } from "../render/track.ts";
 import { encodeWav } from "../render/wav.ts";
 import { bool, num, parseArgs, str, words } from "./args.ts";
@@ -41,7 +42,10 @@ console.log(`${out}`);
 console.log(`  seed ${p.seed}  preset ${p.presetName}`);
 console.log(`  ${p.tempo.toFixed(1)} BPM  ${noteName} ${p.harmony.scaleName}  ${p.arrangement.templateName}  ${p.bars} bars  ${result.stats.durationSeconds.toFixed(1)} s`);
 console.log(`  sections: ${p.arrangement.sections.map((s) => `${s.name}(${s.bars})`).join(" ")}`);
-console.log(`  peak ${result.stats.peakDb.toFixed(2)} dBFS  rms ${result.stats.rmsDb.toFixed(2)} dBFS  crest ${(result.stats.peakDb - result.stats.rmsDb).toFixed(1)} dB`);
+const loud = analyseLoudness(result.audio, p.sections);
+console.log(`  drop rms ${loud.dropRmsDb.toFixed(2)} dBFS (target -7 to -8, loudest 3 s at ${loud.loudestAtSeconds.toFixed(1)} s)`);
+console.log(`  true peak ${loud.truePeakDb.toFixed(2)} dBTP  crest ${loud.crestDb.toFixed(1)} dB${loud.overCompressed ? `  OVER-COMPRESSED (under ${CREST_FLOOR_DB} dB)` : ""}`);
+console.log(`  integrated rms ${loud.integratedRmsDb.toFixed(2)} dBFS (information only, no target)`);
 const peaks = Object.entries(result.stats.busPeaks)
   .map(([k, v]) => `${k} ${(20 * Math.log10(v + 1e-12)).toFixed(1)}`)
   .join("  ");
