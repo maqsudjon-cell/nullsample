@@ -361,3 +361,25 @@ table.tracks td a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* --------------------------------------------------------------- debug ---
+   Shown only when the URL contains #debug. Ground truth from the device:
+   a phone cannot be attached to a debugger, and one screenshot of these
+   values settles more than any amount of reasoning about iOS audio. */
+.debugpanel {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 50;
+  max-width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--flare);
+  padding: 9px 11px;
+  font-size: var(--t-micro);
+  line-height: 1.45;
+}
+.debugpanel b { display: block; color: var(--flare); font-weight: 500; margin-bottom: 5px; }
+.debugpanel table { border-collapse: collapse; width: 100%; }
+.debugpanel td { padding: 0 0 0 8px; color: var(--text); vertical-align: top; }
+.debugpanel td:first-child { padding: 0; color: var(--dim); white-space: pre; }
+.debugpanel td.bad { color: var(--flare); }

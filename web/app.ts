@@ -22,6 +22,8 @@ const SAMPLE_RATE = 44100;
 const PREBUFFER_SECONDS = 3.5;
 /** Below this much audio ahead of the playhead, we are underrunning. */
 const UNDERRUN_MARGIN = 0.12;
+/** Gap between capturing the clock anchor and the first chunk starting. */
+const LEAD_IN = 0.12;
 const BUS_LABELS: Record<string, string> = {
   drums: "drums",
   bass808: "808",
@@ -33,7 +35,7 @@ const BUS_LABELS: Record<string, string> = {
 
 // ------------------------------------------------------------------ state -
 
-type State = "idle" | "rendering" | "playing" | "paused" | "buffering" | "error";
+type State = "idle" | "rendering" | "playing" | "paused" | "buffering" | "blocked" | "error";
 
 interface Track {
   info: PlanInfo;
@@ -56,13 +58,41 @@ let seed = "";
 const words: Record<string, number> = { darker: 0, harder: 0, wider: 0 };
 const locks: Record<string, string> = {};
 
-/** Scheduled playback bookkeeping. */
-let sources: AudioBufferSourceNode[] = [];
-let playStartCtxTime = 0;
-let playStartSample = 0;
+/**
+ * Scheduled playback bookkeeping.
+ *
+ * `anchorCtxTime` is captured ONCE, after `resume()` has resolved and the
+ * context is confirmed running, and every chunk is scheduled against it.
+ * Re-reading `currentTime` per chunk is the classic progressive-playback bug:
+ * if the context has not started yet it reads 0, every section is scheduled in
+ * the past, and the browser discards them all without an error.
+ */
+let sources = new Set<AudioBufferSourceNode>();
+let anchorCtxTime = 0;
+let anchorSample = 0;
 let scheduledSamples = 0;
 let raf = 0;
 let pump = 0;
+let masterGain: GainNode | null = null;
+let analyser: AnalyserNode | null = null;
+let analyserBuf: Float32Array | null = null;
+/** Set when the context stops running while we believed we were playing. */
+let needsGesture = false;
+
+/** Everything the #debug readout reports. Written where it actually happens. */
+const probe = {
+  lastWhen: 0,
+  lastNow: 0,
+  lastBufferPeak: 0,
+  maxBufferPeak: 0,
+  scheduledInPast: 0,
+  nodesAlive: 0,
+  contextRate: 0,
+  requestedRate: 0,
+  resumeError: "",
+  unlockedInGesture: false,
+  chunksScheduled: 0,
+};
 
 // ------------------------------------------------------------------- dom ---
 
@@ -171,6 +201,9 @@ function generate(): void {
   stopPlayback();
   track = null;
   scheduledSamples = 0;
+  probe.maxBufferPeak = 0;
+  probe.scheduledInPast = 0;
+  probe.chunksScheduled = 0;
   setState("rendering");
   elSeed.value = seed;
   writeHash();
@@ -222,7 +255,7 @@ function appendChunk(
 
   const buffered = track.filled / track.info.sampleRate;
   if (state === "rendering" && buffered >= PREBUFFER_SECONDS) {
-    beginPlayback(0);
+    void beginPlayback(0);
   } else if (state === "playing") {
     scheduleReady();
   }
@@ -233,33 +266,156 @@ function onRenderComplete(): void {
   elWav.disabled = false;
   elStems.disabled = false;
   renderLanes(track.info);
-  if (state === "rendering") beginPlayback(0);
-  if (state === "paused" && playStartSample === 0) drawScope(0);
+  if (state === "rendering") void beginPlayback(0);
+  if (state === "paused" && anchorSample === 0) drawScope(0);
   announce(`Track ready. ${clock(track.info.totalSamples / track.info.sampleRate)}.`);
   drawScope();
 }
 
 // -------------------------------------------------------------- playback ---
 
-function audio(): AudioContext {
-  if (!ctx) {
-    const Ctor = window.AudioContext ?? (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    ctx = new Ctor({ sampleRate: SAMPLE_RATE });
+/**
+ * Creates and unlocks the AudioContext. MUST be called synchronously from a
+ * user gesture handler.
+ *
+ * iOS will not let a context start outside a gesture, and the gesture expires
+ * long before a progressive render produces its first bar - so unlocking at
+ * playback time, seconds after the press, is too late. The silent one-sample
+ * buffer is the standard unlock: it gives the context something to render
+ * while the gesture is still live.
+ */
+function unlockAudio(): AudioContext | null {
+  try {
+    if (!ctx) {
+      // 'playback' also keeps audio alive through the iOS silent switch on
+      // 16.4 and later. Set before the context exists where possible.
+      setAudioSession();
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      probe.requestedRate = SAMPLE_RATE;
+      try {
+        ctx = new Ctor({ sampleRate: SAMPLE_RATE, latencyHint: "playback" });
+      } catch {
+        // older Safari rejects the sampleRate option; the buffers carry their
+        // own rate and the source node resamples them
+        ctx = new Ctor();
+      }
+      probe.contextRate = ctx.sampleRate;
+      masterGain = ctx.createGain();
+      masterGain.gain.value = 1;
+      masterGain.connect(ctx.destination);
+      if (debugEnabled()) attachAnalyser();
+      ctx.addEventListener("statechange", onContextStateChange);
+    }
+    setAudioSession();
+    // silent tick, synchronously, while the gesture is still valid
+    const s = ctx.createBufferSource();
+    s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    s.connect(masterGain ?? ctx.destination);
+    s.start();
+    void ctx.resume().then(
+      () => {
+        probe.resumeError = "";
+      },
+      (err: unknown) => {
+        probe.resumeError = err instanceof Error ? err.name : String(err);
+      },
+    );
+    probe.unlockedInGesture = true;
+    return ctx;
+  } catch (err) {
+    probe.resumeError = err instanceof Error ? err.message : String(err);
+    return null;
   }
-  return ctx;
 }
 
-function beginPlayback(fromSample: number): void {
-  if (!track) return;
-  const ac = audio();
-  void ac.resume().then(() => {
-    if (ac.state !== "running") {
-      announce("Audio is blocked by the browser. Press play to start it.");
+/**
+ * Taps the signal actually reaching the destination.
+ *
+ * "Chunks were scheduled" and "sound is being produced" are different claims,
+ * and on a phone only the second one matters. This measures the graph, so a
+ * reading of zero means the engine or the scheduler is at fault, and a healthy
+ * reading with no audible sound points at the device's output instead.
+ */
+function attachAnalyser(): void {
+  if (!ctx || !masterGain || analyser) return;
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyserBuf = new Float32Array(analyser.fftSize);
+  masterGain.connect(analyser);
+}
+
+function outputLevelDb(): number {
+  if (!analyser || !analyserBuf) return -Infinity;
+  analyser.getFloatTimeDomainData(analyserBuf as Float32Array<ArrayBuffer>);
+  let sum = 0;
+  for (let i = 0; i < analyserBuf.length; i++) sum += analyserBuf[i] * analyserBuf[i];
+  const rms = Math.sqrt(sum / analyserBuf.length);
+  return rms > 1e-7 ? 20 * Math.log10(rms) : -Infinity;
+}
+
+function setAudioSession(): void {
+  const nav = navigator as unknown as { audioSession?: { type: string } };
+  if (nav.audioSession) {
+    try {
+      nav.audioSession.type = "playback";
+    } catch {
+      /* not settable on this browser */
     }
-  });
+  }
+}
+
+function audioSessionType(): string {
+  const nav = navigator as unknown as { audioSession?: { type: string } };
+  return nav.audioSession ? nav.audioSession.type : "unsupported";
+}
+
+/**
+ * Safari can move a context to "interrupted" - a state no other engine has -
+ * when another app takes audio focus or the phone locks. Treat anything that
+ * is not "running" as not playing, and say so rather than showing a playhead
+ * that is moving over silence.
+ */
+function onContextStateChange(): void {
+  if (!ctx) return;
+  if (ctx.state !== "running" && (state === "playing" || state === "buffering")) {
+    stopSources();
+    needsGesture = true;
+    setState("blocked");
+    announce("Audio was interrupted. Tap play to resume.");
+  }
+}
+
+/** True only when the hardware is really running. Nothing else may claim it. */
+function contextRunning(): boolean {
+  return ctx !== null && ctx.state === "running";
+}
+
+async function beginPlayback(fromSample: number): Promise<void> {
+  if (!track) return;
+  const ac = ctx ?? unlockAudio();
+  if (!ac) {
+    setState("blocked");
+    return;
+  }
   stopSources();
-  playStartSample = fromSample;
-  playStartCtxTime = ac.currentTime + 0.08;
+  try {
+    await ac.resume();
+  } catch (err) {
+    probe.resumeError = err instanceof Error ? err.name : String(err);
+  }
+  // The anchor is only meaningful once the clock is really running.
+  if (ac.state !== "running") {
+    needsGesture = true;
+    anchorSample = fromSample;
+    setState("blocked");
+    announce("Audio is blocked by the browser. Tap play to start it.");
+    return;
+  }
+  needsGesture = false;
+  anchorSample = fromSample;
+  anchorCtxTime = ac.currentTime + LEAD_IN;
   scheduledSamples = fromSample;
   setState("playing");
   scheduleReady();
@@ -268,7 +424,7 @@ function beginPlayback(fromSample: number): void {
 
 /** Schedules every whole chunk that exists and has not been scheduled yet. */
 function scheduleReady(): void {
-  if (!track || !ctx) return;
+  if (!track || !ctx || !contextRunning()) return;
   const ac = ctx;
   const sr = track.info.sampleRate;
   const chunk = track.info.chunkSize;
@@ -276,45 +432,81 @@ function scheduleReady(): void {
     const count_ = Math.min(chunk, track.filled - scheduledSamples);
     // only schedule a whole chunk unless this is the tail of a finished track
     if (count_ < chunk && !track.complete) break;
+
+    // The buffer keeps the engine's 44.1 kHz rate whatever the device runs at;
+    // the source node resamples. The downloaded file must never depend on the
+    // hardware, so the audio is not resampled before it is stored.
     const buf = ac.createBuffer(2, count_, sr);
-    // copyToChannel's signature insists on a Float32Array over a plain
-    // ArrayBuffer; a subarray of one always is, whatever the type says.
-    buf.copyToChannel(
-      track.left.subarray(scheduledSamples, scheduledSamples + count_) as Float32Array<ArrayBuffer>,
-      0,
-    );
-    buf.copyToChannel(
-      track.right.subarray(scheduledSamples, scheduledSamples + count_) as Float32Array<ArrayBuffer>,
-      1,
-    );
+    const l = track.left.subarray(scheduledSamples, scheduledSamples + count_);
+    const r = track.right.subarray(scheduledSamples, scheduledSamples + count_);
+    buf.copyToChannel(l as Float32Array<ArrayBuffer>, 0);
+    buf.copyToChannel(r as Float32Array<ArrayBuffer>, 1);
+
+    let peak = 0;
+    for (let i = 0; i < count_; i += 17) {
+      const a = l[i] < 0 ? -l[i] : l[i];
+      if (a > peak) peak = a;
+    }
+    probe.lastBufferPeak = peak;
+    if (peak > probe.maxBufferPeak) probe.maxBufferPeak = peak;
+
     const src = ac.createBufferSource();
     src.buffer = buf;
-    src.connect(ac.destination);
-    const when = playStartCtxTime + (scheduledSamples - playStartSample) / sr;
-    src.start(Math.max(when, ac.currentTime));
-    sources.push(src);
+    src.connect(masterGain ?? ac.destination);
+
+    const when = anchorCtxTime + (scheduledSamples - anchorSample) / sr;
+    probe.lastWhen = when;
+    probe.lastNow = ac.currentTime;
+    if (when <= ac.currentTime) {
+      // Scheduling in the past means the chunk is dropped silently. It should
+      // be impossible now that the anchor is captured after resume; if it ever
+      // happens again the readout will say so instead of the page going quiet.
+      probe.scheduledInPast++;
+      console.warn(
+        `nullsample: chunk scheduled in the past (when=${when.toFixed(3)} now=${ac.currentTime.toFixed(3)})`,
+      );
+    }
+    src.start(when);
+    probe.chunksScheduled++;
+
+    // Hold the reference until the node actually ends. A source that is
+    // garbage collected mid-playback stops without raising anything.
+    sources.add(src);
+    src.onended = () => {
+      sources.delete(src);
+      probe.nodesAlive = sources.size;
+    };
+    probe.nodesAlive = sources.size;
+
     scheduledSamples += count_;
   }
-  // drop finished sources so the array cannot grow without bound
-  sources = sources.filter((s) => s.context.currentTime < playStartCtxTime + (scheduledSamples - playStartSample) / (track?.info.sampleRate ?? SAMPLE_RATE));
-  if (state === "buffering" && scheduledSamples > playStartSample) setState("playing");
+  if (state === "buffering" && scheduledSamples > anchorSample) setState("playing");
 }
 
+/**
+ * The playhead, derived from the audio clock and nothing else.
+ *
+ * If the context is not running this returns the anchor, so the interface can
+ * never show a playhead moving over silence.
+ */
 function currentSample(): number {
-  if (!ctx || !track) return 0;
-  const elapsed = ctx.currentTime - playStartCtxTime;
-  if (elapsed < 0) return playStartSample;
-  return Math.min(track.info.totalSamples, playStartSample + Math.round(elapsed * track.info.sampleRate));
+  if (!ctx || !track || ctx.state !== "running") return anchorSample;
+  const elapsed = ctx.currentTime - anchorCtxTime;
+  if (elapsed < 0) return anchorSample;
+  return Math.min(
+    track.info.totalSamples,
+    anchorSample + Math.round(elapsed * track.info.sampleRate),
+  );
 }
 
 /**
  * Two clocks, deliberately.
  *
- * Scheduling and underrun detection run on a timer, because
- * requestAnimationFrame is throttled to a standstill in a background tab - and
- * a user who switches away mid-render would come back to silence with nothing
- * having noticed. The playhead and the canvas run on rAF, because they are
- * purely visual and should stop when nobody is looking.
+ * The timer is a scheduler tick, not a clock: every decision it makes reads
+ * ctx.currentTime. It exists because requestAnimationFrame is throttled to a
+ * standstill in a background tab, and a listener who switches away mid-render
+ * would otherwise return to silence with nothing having noticed. The playhead
+ * and the canvas run on rAF, because they are purely visual.
  */
 function startClocks(): void {
   stopClocks();
@@ -331,13 +523,17 @@ function stopClocks(): void {
 
 function pumpOnce(): void {
   if (!track || !ctx) return;
+  if (state === "playing" && !contextRunning()) {
+    onContextStateChange();
+    return;
+  }
   const sr = track.info.sampleRate;
   const pos = currentSample();
 
   if (state === "playing") {
     if (track.complete && pos >= track.info.totalSamples - 1) {
       stopSources();
-      playStartSample = 0;
+      anchorSample = 0;
       setState("paused");
       stopClocks();
       raf = requestAnimationFrame(draw);
@@ -349,7 +545,7 @@ function pumpOnce(): void {
     // audio rather than letting the output gap.
     if (!track.complete && aheadSeconds < UNDERRUN_MARGIN) {
       stopSources();
-      playStartSample = Math.max(0, pos);
+      anchorSample = Math.max(0, pos);
       setState("buffering");
       announce("Buffering. The render is catching up.");
     }
@@ -357,16 +553,16 @@ function pumpOnce(): void {
   }
 
   if (state === "buffering") {
-    const ahead = (track.filled - playStartSample) / sr;
+    const ahead = (track.filled - anchorSample) / sr;
     if (ahead >= PREBUFFER_SECONDS || track.complete) {
-      beginPlayback(Math.min(playStartSample, track.filled));
+      void beginPlayback(Math.min(anchorSample, track.filled));
     }
   }
 }
 
 function draw(): void {
   if (track) {
-    const pos = state === "playing" ? currentSample() : playStartSample;
+    const pos = state === "playing" ? currentSample() : anchorSample;
     elTime.textContent = clock(pos / track.info.sampleRate);
     highlightMark(pos);
     drawScope(pos);
@@ -377,12 +573,14 @@ function draw(): void {
 function stopSources(): void {
   for (const s of sources) {
     try {
+      s.onended = null;
       s.stop();
     } catch {
       /* already stopped */
     }
   }
-  sources = [];
+  sources.clear();
+  probe.nodesAlive = 0;
 }
 
 function stopPlayback(): void {
@@ -390,16 +588,18 @@ function stopPlayback(): void {
   stopSources();
 }
 
+/** The play/pause control. Always a gesture, so it can also unlock the context. */
 function togglePlay(): void {
   if (!track) return;
+  unlockAudio();
   if (state === "playing") {
     const pos = currentSample();
     stopSources();
-    playStartSample = pos;
+    anchorSample = pos;
     setState("paused");
     drawScope(pos);
-  } else if (state === "paused" || state === "buffering") {
-    beginPlayback(Math.min(playStartSample, track.filled));
+  } else if (state === "paused" || state === "buffering" || state === "blocked") {
+    void beginPlayback(Math.min(anchorSample, track.filled));
   }
 }
 
@@ -678,6 +878,11 @@ function finishStems(): void {
 // ------------------------------------------------------------------- ui ----
 
 function setState(next: State): void {
+  // A2: the interface may not claim to be playing while the context is not
+  // running. An interface that can lie about this costs hours on every future
+  // audio bug, so the lie is made impossible here rather than avoided by
+  // convention at every call site.
+  if (next === "playing" && !contextRunning()) next = "blocked";
   state = next;
   const labels: Record<State, string> = {
     idle: "ready",
@@ -685,14 +890,16 @@ function setState(next: State): void {
     playing: "playing",
     paused: "paused",
     buffering: "buffering",
+    blocked: "tap play to start audio",
     error: "stopped",
   };
   elState.textContent = labels[next];
   elGenerate.textContent = track ? "REROLL" : "GENERATE";
   elGenerate.disabled = false;
   elPlay.disabled = !track;
-  elPlay.textContent = next === "playing" ? "▮▮" : "▶";
-  elPlay.setAttribute("aria-label", next === "playing" ? "Pause" : "Play");
+  const showPause = next === "playing";
+  elPlay.textContent = showPause ? "\u25AE\u25AE" : "\u25B6";
+  elPlay.setAttribute("aria-label", showPause ? "Pause" : "Play");
   if (next === "rendering") {
     elWav.disabled = true;
     elStems.disabled = true;
@@ -731,16 +938,96 @@ function count(name: string): void {
   g?.count?.({ path: name, title: name, event: true });
 }
 
+// ----------------------------------------------------------------- debug ---
+
+/**
+ * The #debug readout.
+ *
+ * Ground truth from the device, because a phone cannot be attached to a
+ * debugger and every theory about iOS audio is worth less than one screenshot.
+ * Every value is read live from the objects that decide whether sound happens.
+ */
+let debugTimer = 0;
+
+function debugEnabled(): boolean {
+  return location.hash.includes("debug");
+}
+
+function buildDebug(): void {
+  if (!debugEnabled() || document.getElementById("debugpanel")) return;
+  const panel = document.createElement("div");
+  panel.id = "debugpanel";
+  panel.className = "debugpanel";
+  panel.setAttribute("role", "status");
+  panel.setAttribute("aria-live", "off");
+  panel.innerHTML = '<b>audio debug</b><table id="debugrows"></table>';
+  document.body.appendChild(panel);
+  attachAnalyser();
+  debugTimer = window.setInterval(paintDebug, 120);
+  paintDebug();
+}
+
+function paintDebug(): void {
+  const rows = document.getElementById("debugrows");
+  if (!rows) return;
+  const gain = masterGain ? masterGain.gain.value : NaN;
+  const outputDb = outputLevelDb();
+  const pos = track ? currentSample() : 0;
+  const data: [string, string, boolean?][] = [
+    ["ctx.state", ctx ? ctx.state : "no context", !ctx || ctx.state !== "running"],
+    ["ctx.currentTime", ctx ? ctx.currentTime.toFixed(3) : "—", !!ctx && ctx.currentTime === 0],
+    ["ctx.sampleRate", ctx ? String(ctx.sampleRate) : "—", !!ctx && ctx.sampleRate !== SAMPLE_RATE],
+    ["requested rate", String(probe.requestedRate || SAMPLE_RATE)],
+    ["audioSession.type", audioSessionType(), audioSessionType() !== "playback"],
+    ["unlocked in gesture", String(probe.unlockedInGesture), !probe.unlockedInGesture],
+    ["resume error", probe.resumeError || "none", probe.resumeError !== ""],
+    ["anchor ctxTime", anchorCtxTime.toFixed(3)],
+    ["last start(when)", probe.lastWhen.toFixed(3)],
+    ["  ctxTime then", probe.lastNow.toFixed(3)],
+    ["scheduled in past", String(probe.scheduledInPast), probe.scheduledInPast > 0],
+    ["chunks scheduled", String(probe.chunksScheduled)],
+    ["nodes alive", String(probe.nodesAlive)],
+    ["gain at destination", Number.isFinite(gain) ? gain.toFixed(3) : "no gain node", gain !== 1],
+    ["buffer peak", `${probe.lastBufferPeak.toFixed(3)} (max ${probe.maxBufferPeak.toFixed(3)})`, probe.maxBufferPeak < 0.01],
+    ["output level", outputDb === -Infinity ? "SILENT" : `${outputDb.toFixed(1)} dB`, outputDb < -60],
+    ["ui state", state],
+    ["playhead", track ? `${(pos / track.info.sampleRate).toFixed(2)} s` : "—"],
+    ["rendered", track ? `${(track.filled / track.info.sampleRate).toFixed(1)} s` : "—"],
+    ["scheduled to", track ? `${(scheduledSamples / track.info.sampleRate).toFixed(1)} s` : "—"],
+  ];
+  rows.innerHTML = data
+    .map(
+      ([k, v, bad]) =>
+        `<tr><td>${k}</td><td class="${bad ? "bad" : ""}">${escapeHtml(v)}</td></tr>`,
+    )
+    .join("");
+}
+
+window.addEventListener("hashchange", () => {
+  if (debugEnabled()) buildDebug();
+  else {
+    const p = document.getElementById("debugpanel");
+    if (p) {
+      p.remove();
+      window.clearInterval(debugTimer);
+    }
+  }
+});
+
 // ------------------------------------------------------------------ boot ---
 
 readHash();
 if (!seed) seed = newSeed();
 elSeed.value = seed;
 buildWords();
+buildDebug();
 setState("idle");
 drawScope();
 
 elGenerate.addEventListener("click", () => {
+  // Synchronously, while the gesture is still live: iOS will not start a
+  // context later, and "later" is where progressive playback lives.
+  unlockAudio();
   generate();
 });
 elPlay.addEventListener("click", togglePlay);
@@ -764,6 +1051,24 @@ elWav.addEventListener("click", downloadWav);
 elStems.addEventListener("click", requestStems);
 
 window.addEventListener("resize", () => drawScope(track ? currentSample() : -1));
+
+// A7: coming back from a lock screen or another app. Resuming may need a fresh
+// gesture, in which case say so rather than pretending to play.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !ctx || !track) return;
+  if (ctx.state === "running") return;
+  void ctx.resume().then(
+    () => {
+      if (ctx && ctx.state === "running" && needsGesture && state === "blocked") {
+        void beginPlayback(anchorSample);
+      }
+    },
+    () => {
+      needsGesture = true;
+      setState("blocked");
+    },
+  );
+});
 window.addEventListener("hashchange", () => {
   readHash();
   elSeed.value = seed;
@@ -773,6 +1078,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.code === "Space") {
     e.preventDefault();
+    unlockAudio();
     if (track) togglePlay();
     else generate();
   }
