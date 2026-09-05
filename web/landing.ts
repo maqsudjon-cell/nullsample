@@ -1,3 +1,4 @@
+import { mountCards, redrawCards, type CardData } from "./cards.ts";
 /**
  * The landing page.
  *
@@ -57,6 +58,9 @@ function playOnly(el: HTMLAudioElement): void {
     playing.pause();
     playing.currentTime = 0;
   }
+  // only one thing on the page makes sound at a time
+  const stopCards = (window as unknown as { nullsampleStopCards?: () => void }).nullsampleStopCards;
+  stopCards?.();
   playing = el;
   void el.play().catch(() => {
     /* a browser that will not start it has already told the user why */
@@ -224,6 +228,26 @@ async function boot(): Promise<void> {
   // below the fold, and building it during load was the single largest task
   // on the page.
   const buildRest = () => {
+  // --- the cards: the body of the page, and its explanation ------------
+  void (async () => {
+    try {
+      const cards: CardData = await (await fetch("/demos/cards.json")).json();
+      mountCards($("cards"), cards, count);
+    } catch {
+      // the cards explain the product; they are not the product. If they
+      // cannot load, the page still works and still plays.
+      $("cards").remove();
+    }
+  })();
+
+  // Seed ticker: real seeds, each one a link into the generator. A ticker
+  // that scrolled decoration would be motion without meaning.
+  const ticker = $("tickrow");
+  const pool = [...manifest.tracks, ...manifest.tracks, ...manifest.tracks, ...manifest.tracks];
+  ticker.innerHTML = pool
+    .map((t) => `<a href="/generate/#s=${encodeURIComponent(t.seed)}">${escapeHtml(t.seed)}</a>`)
+    .join("");
+
   // --- code beside sound ----------------------------------------------
   $("clips").innerHTML = manifest.clips
     .map((clip) => {
@@ -336,5 +360,8 @@ async function boot(): Promise<void> {
   else setTimeout(buildRest, 200);
 }
 
-window.addEventListener("resize", () => drawHero(heroProgress));
+window.addEventListener("resize", () => {
+  drawHero(heroProgress);
+  redrawCards();
+});
 void boot();

@@ -363,110 +363,150 @@ table.tracks td a:hover { text-decoration: underline; }
 .debugpanel td.bad { color: var(--flare); }
 
 /* =========================================================== landing page ==
-   Same rules as the instrument: hairline divisions, no cards, one thing
-   dominant per screen. The hero waveform is full bleed; everything else sits
-   in the column. */
+   Cards carry the explanation, so there is almost no prose to style. Panels
+   are a --raise fill with no border: the animation is the content, and four
+   bordered boxes is the failure this page already made once. */
 
-.inner { max-width: 1000px; margin: 0 auto; padding: 0 var(--edge); }
+.inner { max-width: 1080px; margin: 0 auto; padding: 0 var(--edge); }
 
-.hero { padding: 46px 0 0; }
+.hero { padding: 54px 0 0; }
 .hero h1 {
-  font-size: clamp(24px, 4.6vw, 40px);
+  font-size: var(--t-claim);
   font-weight: 500;
-  line-height: 1.18;
-  letter-spacing: -0.01em;
-  margin: 0 0 14px;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  margin: 0 0 18px;
+  color: var(--bright);
+  max-width: 15ch;
 }
-.hero h1 .null { color: var(--flare); }
-.lede { color: var(--dim); max-width: 60ch; margin: 0 0 18px; }
-.fine { color: var(--dim); font-size: var(--t-micro); max-width: 68ch; margin: 12px 0 0; }
+.lede { color: var(--mute); max-width: 56ch; margin: 0 0 26px; font-size: var(--t-lead); }
+.fine { color: var(--mute); font-size: var(--t-micro); margin: 14px 0 0; }
 .fine a, .lede a { color: var(--text); }
 
-.herowrap { width: 100%; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.herowrap canvas { display: block; width: 100%; height: 148px; }
+.herowrap { width: 100%; }
+.herowrap canvas { display: block; width: 100%; height: 150px; }
 
-.herobar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-top: 14px;
-  padding-bottom: 2px;
-  flex-wrap: wrap;
+.herobar { display: flex; align-items: center; gap: 14px; padding-top: 18px; flex-wrap: wrap; }
+.ghost {
+  display: inline-block;
+  text-decoration: none;
+  height: 56px;
+  line-height: 54px;
+  padding: 0 26px;
+  border: 1px solid var(--line-hi);
+  color: var(--text);
+  font-size: var(--t-body);
+  letter-spacing: 0.14em;
 }
-.herostat { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-micro); color: var(--dim); }
+.ghost:hover { border-color: var(--mute); color: var(--bright); }
+.herostat { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-micro); color: var(--mute); }
 .herostat b { color: var(--text); font-weight: 500; letter-spacing: 0.12em; font-size: var(--t-body); }
-.herotime { margin-left: auto; color: var(--dim); font-size: var(--t-micro); }
+.herotime { margin-left: auto; color: var(--mute); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
 
-.band { padding: 44px 0 0; }
+.band { padding: 56px 0 0; }
 .band h2 {
-  font-size: var(--t-lead);
+  font-size: var(--t-head);
   font-weight: 500;
-  margin: 0 0 10px;
-  padding-top: 18px;
+  margin: 0 0 20px;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.points { list-style: none; padding: 0; margin: 0; max-width: 62ch; }
+.points li { color: var(--mute); padding: 10px 0; border-bottom: 1px solid var(--line); font-size: var(--t-lead); }
+.points li:last-child { border-bottom: 0; }
+
+/* ----------------------------------------------------------------- cards - */
+
+.cards { padding: 60px 0 0; }
+.cardgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.card { background: var(--raise); padding: 0; overflow: hidden; }
+.cardart { display: block; width: 100%; height: 190px; }
+.cardfoot {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 18px 18px;
   border-top: 1px solid var(--line);
 }
-
-.points { list-style: none; padding: 0; margin: 0; max-width: 68ch; }
-.points li { color: var(--dim); padding: 12px 0; border-bottom: 1px solid var(--line); }
-.points li:last-child { border-bottom: 0; }
-.points b { color: var(--text); font-weight: 500; }
-.points.tight li { padding: 8px 0; }
+.card h3 { font-size: var(--t-body); font-weight: 500; margin: 0 0 4px; color: var(--text); }
+.card p { margin: 0; color: var(--mute); font-size: var(--t-micro); }
+.cardplay { margin-left: auto; flex: none; width: 42px; height: 42px; padding: 0; }
 
 /* ------------------------------------------------------ code beside sound - */
 
 .clip { padding: 18px 0 0; border-top: 1px solid var(--line); margin-top: 18px; }
 .clip:first-child { border-top: 0; margin-top: 0; }
-.clip h3 { font-size: var(--t-body); font-weight: 500; margin: 0 0 6px; }
-.clip .blurb { color: var(--dim); font-size: var(--t-micro); max-width: 68ch; margin: 0 0 14px; }
-.cliprow { display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: start; }
+.clip h3 { font-size: var(--t-body); font-weight: 500; margin: 0 0 10px; }
+.clip .blurb { display: none; }
+.cliprow { display: grid; grid-template-columns: 1fr 210px; gap: 20px; align-items: start; }
 .code {
   margin: 0;
   overflow-x: auto;
   font-size: var(--t-micro);
-  line-height: 1.65;
-  color: var(--dim);
-  border-left: 1px solid var(--line);
+  line-height: 1.7;
+  color: var(--mute);
+  border-left: 1px solid var(--line-hi);
   padding-left: 14px;
 }
 .code .cl { display: block; padding: 0 4px; margin-left: -4px; }
-.code .cl.live { color: var(--text); background: rgba(255, 106, 26, 0.12); box-shadow: inset 2px 0 0 var(--flare); }
+.code .cl.live { color: var(--bright); background: var(--flare-glow); box-shadow: inset 2px 0 0 var(--flare); }
 .clipside { display: flex; flex-direction: column; gap: 10px; }
 .clipplay { width: 100%; }
 .stagelabel { color: var(--flare); font-size: var(--t-micro); margin: 0; min-height: 2.6em; }
-.src { color: var(--line); font-size: var(--t-micro); margin: 0; }
+.src { color: var(--mute); font-size: var(--t-micro); margin: 0; }
 
 /* ------------------------------------------------------------ demo tracks - */
 
 .demos { list-style: none; padding: 0; margin: 0; }
 .demo {
   display: grid;
-  grid-template-columns: 44px 130px 1fr;
+  grid-template-columns: 46px 140px 1fr;
   align-items: center;
   gap: 14px;
-  padding: 8px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--line);
 }
 .demo:last-child { border-bottom: 0; }
-.demoplay { height: 34px; width: 44px; padding: 0; }
+.demoplay { height: 36px; width: 46px; padding: 0; }
 .demoseed { color: var(--text); text-decoration: none; letter-spacing: 0.1em; font-weight: 500; }
 .demoseed:hover { color: var(--flare); }
-.demometa { color: var(--dim); font-size: var(--t-micro); }
+.demometa { color: var(--mute); font-size: var(--t-micro); }
 
-.cta-band .inner { padding-top: 18px; border-top: 1px solid var(--line); }
-a.primary {
-  display: inline-block;
+.cta-band .inner { padding-top: 22px; }
+a.primary { display: inline-block; text-decoration: none; line-height: 54px; }
+
+/* --------------------------------------------------------------- ticker - */
+
+.ticker { margin-top: 34px; overflow: hidden; border-top: 1px solid var(--line); padding: 12px 0; }
+.tickrow { display: flex; gap: 34px; width: max-content; animation: tick 46s linear infinite; }
+.tickrow a {
+  color: var(--mute);
   text-decoration: none;
-  line-height: 44px;
-  height: 44px;
+  font-size: var(--t-micro);
+  letter-spacing: 0.22em;
+  white-space: nowrap;
 }
+.tickrow a:hover { color: var(--flare); }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
+@media (max-width: 860px) {
+  .cardgrid { grid-template-columns: 1fr; }
+}
 @media (max-width: 720px) {
   .cliprow { grid-template-columns: 1fr; gap: 12px; }
   .clipside { flex-direction: row; align-items: center; gap: 12px; }
   .clipplay { width: auto; flex: none; }
   .stagelabel { min-height: 0; flex: 1; }
   .src { display: none; }
-  .demo { grid-template-columns: 40px 1fr; row-gap: 2px; }
+  .demo { grid-template-columns: 42px 1fr; row-gap: 2px; }
   .demometa { grid-column: 2; }
-  .herowrap canvas { height: 110px; }
+  .herowrap canvas { height: 116px; }
+  .hero { padding: 34px 0 0; }
+  .cardart { height: 168px; }
+  .ghost { padding: 0 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickrow { animation: none; }
 }

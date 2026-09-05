@@ -23,9 +23,10 @@
     "build": "node tools/build-web.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test",
     "tracks": "node tools/build-tracks-page.mjs",
-    "build:all": "npm run brand && npm run tracks && npm run demos && npm run build",
+    "build:all": "npm run brand && npm run tracks && npm run demos && npm run cards && npm run build",
     "serve": "node tools/serve.mjs",
-    "demos": "node cli/demos.ts && bash tools/encode-demos.sh"
+    "demos": "node cli/demos.ts && bash tools/encode-demos.sh",
+    "cards": "node cli/cards.ts && bash tools/encode-demos.sh"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

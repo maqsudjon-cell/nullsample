@@ -7,6 +7,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DIR=web/demos
 BITRATE=96
+# Card and stem clips are illustrations, not listening material: mono, low
+# bitrate, a few seconds each. The four track excerpts stay stereo.
+CARD_BITRATE=64
 
 if command -v lame >/dev/null 2>&1; then
   ENC=lame
@@ -21,10 +24,23 @@ total=0
 for wav in "$DIR"/*.wav; do
   [ -e "$wav" ] || continue
   mp3="${wav%.wav}.mp3"
+  base=$(basename "$wav")
+  case "$base" in
+    card-*|stem-*) BR=$CARD_BITRATE; MONO=1 ;;
+    *)             BR=$BITRATE;      MONO=0 ;;
+  esac
   if [ "$ENC" = lame ]; then
-    lame --quiet -b "$BITRATE" -q 2 "$wav" "$mp3"
+    if [ "$MONO" = 1 ]; then
+      lame --quiet -m m -b "$BR" -q 2 "$wav" "$mp3"
+    else
+      lame --quiet -b "$BR" -q 2 "$wav" "$mp3"
+    fi
   else
-    ffmpeg -loglevel error -y -i "$wav" -b:a "${BITRATE}k" "$mp3"
+    if [ "$MONO" = 1 ]; then
+      ffmpeg -loglevel error -y -i "$wav" -ac 1 -b:a "${BR}k" "$mp3"
+    else
+      ffmpeg -loglevel error -y -i "$wav" -b:a "${BR}k" "$mp3"
+    fi
   fi
   size=$(wc -c < "$mp3")
   total=$((total + size))
