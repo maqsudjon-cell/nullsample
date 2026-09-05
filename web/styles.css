@@ -8,18 +8,23 @@
  * --dim is lifted from the #6B7480 in the brief to #7A8391: the original
  * measured 4.20:1 on --void, under the 4.5:1 floor. It now measures 5.20:1 on
  * --void and 4.86:1 on --panel.
+ *
+ * Font URLs are absolute, not relative. This stylesheet is inlined into every
+ * page, so a relative URL would resolve against the PAGE - and /generate/
+ * would ask for /generate/fonts/..., 404, and quietly fall back to the system
+ * mono on every route but the root.
  */
 
 @font-face {
   font-family: "JetBrains Mono";
-  src: url("./fonts/jetbrains-mono-regular.woff2") format("woff2");
+  src: url("/fonts/jetbrains-mono-regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "JetBrains Mono";
-  src: url("./fonts/jetbrains-mono-medium.woff2") format("woff2");
+  src: url("/fonts/jetbrains-mono-medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
