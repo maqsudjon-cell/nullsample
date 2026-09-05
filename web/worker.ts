@@ -23,20 +23,30 @@ function post(msg: FromWorker, transfer: Transferable[] = []): void {
 
 const yieldToQueue = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-/** Peak envelope for one chunk, for drawing. */
+/**
+ * Peak AND rms envelope for one chunk.
+ *
+ * Peak alone draws a solid block on a track this heavily limited, which hides
+ * the arrangement. Peak as an outline with rms filled inside it is the reading
+ * a DAW gives you, and it makes the drops and breaks visible at a glance.
+ * Interleaved as [peak, rms] per bucket.
+ */
 function peaksOf(L: Float32Array, R: Float32Array, count: number, buckets: number): Float32Array {
-  const out = new Float32Array(buckets);
+  const out = new Float32Array(buckets * 2);
   const step = count / buckets;
   for (let b = 0; b < buckets; b++) {
     const from = Math.floor(b * step);
     const to = b === buckets - 1 ? count : Math.floor((b + 1) * step);
     let p = 0;
+    let sum = 0;
     for (let i = from; i < to; i++) {
       const a = (L[i] + R[i]) * 0.5;
       const m = a < 0 ? -a : a;
       if (m > p) p = m;
+      sum += a * a;
     }
-    out[b] = p;
+    out[b * 2] = p;
+    out[b * 2 + 1] = Math.sqrt(sum / Math.max(1, to - from));
   }
   return out;
 }

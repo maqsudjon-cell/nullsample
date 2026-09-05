@@ -39,7 +39,7 @@ interface Track {
   info: PlanInfo;
   left: Float32Array;
   right: Float32Array;
-  /** peak envelope, PEAKS_PER_CHUNK per bar */
+  /** [peak, rms] interleaved, PEAKS_PER_CHUNK buckets per bar */
   peaks: Float32Array;
   /** how many samples have been rendered so far */
   filled: number;
@@ -192,7 +192,7 @@ function startTrack(info: PlanInfo): void {
     info,
     left: new Float32Array(info.totalSamples),
     right: new Float32Array(info.totalSamples),
-    peaks: new Float32Array(chunks * PEAKS_PER_CHUNK),
+    peaks: new Float32Array(chunks * PEAKS_PER_CHUNK * 2),
     filled: 0,
     complete: false,
     busPeaks: {},
@@ -216,7 +216,7 @@ function appendChunk(
   const r = new Float32Array(right);
   track.left.set(l, start);
   track.right.set(r, start);
-  track.peaks.set(new Float32Array(peaks), index * PEAKS_PER_CHUNK);
+  track.peaks.set(new Float32Array(peaks), index * PEAKS_PER_CHUNK * 2);
   track.filled = start + count_;
   drawScope();
 
@@ -450,17 +450,26 @@ function drawScope(playhead = -1): void {
     g.stroke();
   }
 
-  // the trace. Newly arrived bars are drawn in --flare and settle to --text,
-  // so the drawing-in IS the render, not an animation played over it.
+  // The trace. Newly arrived bars are drawn in --flare and settle to --text,
+  // so the drawing-in IS the render rather than an animation played over it.
+  // Peak is drawn faintly and rms solid inside it: peak alone is a solid block
+  // on a limited master, and the shape of the arrangement disappears.
   const freshFrom = reducedMotion ? filledBuckets : Math.max(0, filledBuckets - PEAKS_PER_CHUNK * 2);
+  const bw = Math.max(1, w / buckets);
+  const bodyW = bw > 1.2 ? bw - 0.4 : bw;
+  const height = mid - 6;
   for (let b = 0; b < filledBuckets && b < buckets; b++) {
     const x = (b / buckets) * w;
-    const bw = Math.max(1, w / buckets);
-    const p = track.peaks[b];
-    const amp = Math.max(0.6, p * (mid - 6));
-    g.fillStyle = b >= freshFrom ? flare : text;
-    g.fillRect(x, mid - amp, bw > 1.2 ? bw - 0.4 : bw, amp * 2);
+    const fresh = b >= freshFrom;
+    const peakAmp = Math.max(0.6, track.peaks[b * 2] * height);
+    g.globalAlpha = fresh ? 0.5 : 0.32;
+    g.fillStyle = fresh ? flare : text;
+    g.fillRect(x, mid - peakAmp, bodyW, peakAmp * 2);
+    const rmsAmp = Math.max(0.6, track.peaks[b * 2 + 1] * height * 1.6);
+    g.globalAlpha = 1;
+    g.fillRect(x, mid - rmsAmp, bodyW, rmsAmp * 2);
   }
+  g.globalAlpha = 1;
 
   // playhead
   if (playhead >= 0 && total > 0) {

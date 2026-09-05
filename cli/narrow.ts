@@ -32,8 +32,10 @@ const dir = args.positional[0] ?? "./batch";
 const MAX_SHRINK = num(args, "shrink", 0.34);
 /** minimum |r| before a parameter is considered at all */
 const MIN_ABS_R = num(args, "minr", 0.18);
-/** permutation-test threshold */
+/** per-test permutation threshold, before the false-discovery correction */
 const MAX_P = num(args, "p", 0.1);
+/** false discovery rate the Benjamini-Hochberg step controls at */
+const FDR = num(args, "fdr", 0.1);
 
 const indexPath = join(dir, "batch.json");
 const ratingsPath = join(dir, "ratings.json");
@@ -136,6 +138,8 @@ interface Finding {
   key: string;
   r: number;
   p: number;
+  /** true once the finding survives the false-discovery correction */
+  kept?: boolean;
   oldMin: number;
   oldMax: number;
   newMin: number;
@@ -203,6 +207,33 @@ for (const key of paramKeys) {
   });
 }
 
+/**
+ * Benjamini-Hochberg false discovery rate control.
+ *
+ * There are well over a hundred parameters. Testing every one at p < 0.1 and
+ * reporting whatever clears it produces about thirteen false positives from
+ * noise alone - on a real run of 60 ratings with one planted signal, the
+ * uncorrected version proposed seventeen parameters when exactly one was real.
+ * Narrowing sixteen ranges toward noise is worse than narrowing none, because
+ * it bakes the noise into the preset and the next batch inherits it.
+ *
+ * BH keeps the largest k for which the k-th smallest p is at or below
+ * (k/m) * FDR, where m is the number of parameters actually tested.
+ */
+function controlFalseDiscovery(all: Finding[], tested: number): Finding[] {
+  const sorted = [...all].sort((a, b) => a.p - b.p);
+  let cutoff = -1;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].p <= ((i + 1) / Math.max(1, tested)) * FDR) cutoff = i;
+  }
+  return cutoff < 0 ? [] : sorted.slice(0, cutoff + 1);
+}
+
+const testedCount = paramKeys.length - skipped.length;
+const survived = controlFalseDiscovery(findings, testedCount);
+const rejected = findings.length - survived.length;
+findings.length = 0;
+findings.push(...survived);
 findings.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
 
 // --- categorical choices ----------------------------------------------------
@@ -255,12 +286,18 @@ lines.push(`  ${rated.length} of ${index.count} rated   mean ${meanRating.toFixe
 lines.push(`  distribution  1:${dist[0]}  2:${dist[1]}  3:${dist[2]}  4:${dist[3]}  5:${dist[4]}`);
 lines.push(`  rated poor (1-2): ${(poorRate * 100).toFixed(0)}%   ${poorRate < 0.05 ? "AT TARGET - the preset is done" : "target is under 5%"}`);
 lines.push("");
+lines.push(
+  `  ${testedCount} parameters tested, false discovery rate controlled at ${FDR}` +
+    (rejected > 0 ? `, ${rejected} candidate${rejected === 1 ? "" : "s"} rejected as likely noise` : ""),
+);
+lines.push("");
 if (findings.length === 0) {
-  lines.push("  No parameter cleared the significance threshold.");
-  lines.push("  That is a real result, not a failure: with this many ratings, nothing");
-  lines.push("  in the parameter space is reliably driving the score. Either the ranges");
+  lines.push("  No parameter survived the false-discovery correction.");
+  lines.push("  That is a real result, not a failure: across this many parameters, nothing");
+  lines.push("  is driving the score by more than chance would explain. Either the ranges");
   lines.push("  are already reasonable, or the problem is somewhere the ranges cannot");
-  lines.push("  reach - arrangement, note choice, or a bug.");
+  lines.push("  reach - arrangement, note choice, or a bug. Rating more renders is the");
+  lines.push("  only thing that will separate a real effect from noise.");
 } else {
   lines.push(`  ${findings.length} parameter${findings.length === 1 ? "" : "s"} proposed for narrowing:`);
   lines.push("");

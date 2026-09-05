@@ -30,7 +30,7 @@ const HEADLINE = [
   "bass.decay",
   "duck.depth",
   "drums.rollChance",
-  "master.inputDb",
+  "master.makeupDb",
 ];
 
 const rows = index.records.map((r, i) => ({
