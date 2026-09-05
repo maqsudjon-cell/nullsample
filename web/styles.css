@@ -31,21 +31,33 @@
 }
 
 :root {
+  /* The ramp. The earlier six values had no mid-range, which forced every
+     element to be either bright white or dim grey and is why the interface
+     read as crude. */
   --void: #08090c;
-  --panel: #101317;
-  --line: #1e232b;
-  --dim: #7a8391;
-  --text: #e4e7eb;
+  --raise: #0d0f13;
+  --panel: #12151a;
+  --line: #1c2028;
+  --line-hi: #2a303a;
+  --dim: #59616e;
+  --mute: #838c99;
+  --text: #d8dce2;
+  --bright: #f2f4f7;
   --flare: #ff6a1a;
+  --flare-dim: #b34a12;
+  --flare-glow: rgba(255, 106, 26, 0.12);
 
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* modular scale, 1.25. Nothing below 12px: smaller than that fails the
-     legible-font-size floor on mobile, and mono is already narrow. */
+  /* A real ramp with a genuinely large top step. Everything used to sit
+     within nine pixels of everything else, which is the other reason nothing
+     read as important. */
   --t-micro: 12px;
-  --t-body: 13.5px;
-  --t-lead: 16px;
-  --t-read: 21px;
+  --t-body: 14px;
+  --t-lead: 17px;
+  --t-read: 22px;
+  --t-head: clamp(26px, 3.4vw, 34px);
+  --t-claim: clamp(38px, 7vw, 76px);
 
   --gap: 14px;
   --edge: 24px;
@@ -89,141 +101,103 @@ header {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  padding: 14px var(--edge);
-  border-bottom: 1px solid var(--line);
+  padding: 16px var(--edge);
   flex-wrap: wrap;
 }
 .mark { display: block; width: 22px; height: 22px; flex: none; }
-.wordmark {
-  font-weight: 500;
-  font-size: var(--t-lead);
-  letter-spacing: 0.06em;
-  margin: 0;
-}
-.tag { color: var(--dim); font-size: var(--t-micro); }
-nav { margin-left: auto; display: flex; gap: 16px; }
-nav a { color: var(--dim); text-decoration: none; font-size: var(--t-micro); }
+.wordmark { font-weight: 500; font-size: var(--t-lead); letter-spacing: 0.06em; margin: 0; }
+.tag { color: var(--mute); font-size: var(--t-micro); }
+nav { margin-left: auto; display: flex; gap: 18px; }
+nav a { color: var(--mute); text-decoration: none; font-size: var(--t-micro); }
 nav a:hover, nav a[aria-current="page"] { color: var(--text); }
 
 /* --------------------------------------------------------------- waveform -
 
-   Full bleed, and the dominant element on the page. The grid is drawn into
-   the canvas at real amplitude and time values rather than being a texture
-   laid behind it, so the graph paper is actually measuring something. */
+   The object on the page. No border, no container, air above and below. The
+   measurement grid that used to cross it lives behind the technical toggle. */
 
-.scope {
-  position: relative;
-  width: 100%;
-  border-top: 1px solid var(--line);
-}
+.scope { position: relative; width: 100%; padding: 26px 0 8px; }
 .scope canvas {
   display: block;
   width: 100%;
-  height: 46vh;
-  min-height: 240px;
-  max-height: 460px;
+  height: 42vh;
+  min-height: 220px;
+  max-height: 420px;
 }
 
-/* ----------------------------------------------------------------- ruler -
+/* --------------------------------------------------------- section name --
 
-   Hairline ticks carry the section boundaries, so the labels beneath them are
-   free to be short and can never clip. Bar numbers because this is a musical
-   instrument and the bar is its unit. */
+   One name at a time, large. Every label cannot fit and trying is what
+   produced "introbuild" and a clipped "outro"; ticks carry the other
+   boundaries with no text at all. */
 
-.ruler {
-  position: relative;
-  height: 42px;
-  border-top: 1px solid var(--line);
-  margin-bottom: 10px;
-  /* aligned to the waveform's plot area, past the amplitude gutter */
-  margin-left: 26px;
+.nowbar {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-height: 46px;
+  padding: 0 0 4px;
 }
+.nowname {
+  font-size: var(--t-head);
+  font-weight: 500;
+  color: var(--bright);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.nowname.swap { opacity: 0; transform: translateY(-5px); }
+.nowtimes { margin-left: auto; color: var(--mute); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
+.nowtimes b { color: var(--text); font-weight: 400; }
+
+.ruler { position: relative; height: 10px; }
 .ruler .tick {
   position: absolute;
   top: 0;
-  transform: translateX(-0.5px);
-  border-left: 1px solid var(--line);
   height: 7px;
-  pointer-events: none;
+  border-left: 1px solid var(--line-hi);
+  transform: translateX(-0.5px);
 }
-.ruler .tick.live { border-left-color: var(--flare); height: 40px; }
-.ruler .lab {
-  position: absolute;
-  top: 9px;
-  font-size: var(--t-micro);
-  color: var(--dim);
-  padding-left: 5px;
-  white-space: nowrap;
-  line-height: 1.25;
-}
-.ruler .lab.live { color: var(--flare); }
-/* Bar numbers are the instrument's native unit, so they have to be readable.
-   --line is a hairline colour, not a text colour. */
-.ruler .lab b { display: block; font-weight: 400; color: var(--dim); opacity: 0.7; }
-.ruler .lab.live b { color: var(--flare); opacity: 1; }
-.ruler .playhead {
-  position: absolute;
-  top: 0;
-  height: 40px;
-  border-left: 1px solid var(--flare);
-  pointer-events: none;
-}
+.ruler .tick.live { border-left-color: var(--flare); height: 10px; }
+.ruler .playhead { position: absolute; top: 0; height: 10px; border-left: 1px solid var(--flare); }
 
-.axis {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: var(--t-micro);
-  color: var(--dim);
-  padding-top: 8px;
-}
-.axis .state { color: var(--text); }
+/* ------------------------------------------------------------- transport - */
 
-/* ------------------------------------------------------------- transport -
-
-   One line, aligned to the waveform edges, everything the same height. */
-
-.transport {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 16px 0 0;
-  flex-wrap: wrap;
-}
+.transport { display: flex; gap: 12px; align-items: center; margin: 20px 0 0; flex-wrap: wrap; }
 
 button {
   font: 400 var(--t-body) / 1 var(--mono);
   background: transparent;
   color: var(--text);
-  border: 1px solid var(--line);
-  padding: 0 15px;
-  height: 44px;
+  border: 1px solid var(--line-hi);
+  padding: 0 16px;
+  height: 46px;
   cursor: pointer;
   letter-spacing: 0.04em;
 }
-button:hover:not(:disabled) { border-color: var(--dim); }
+button:hover:not(:disabled) { border-color: var(--mute); }
 button:active:not(:disabled) { background: var(--panel); }
-button:disabled { color: var(--line); border-color: var(--line); cursor: default; }
+button:disabled { color: var(--dim); border-color: var(--line); cursor: default; }
 
-/* The primary action leads by position, weight and space - not by area. A
-   full-width solid bar of the accent is the opposite of accent scarcity. */
+/* The primary action leads by size, space and a wash - not by a slab of
+   accent, and not by carrying the same weight as the pause square. */
 .primary {
   color: var(--flare);
   border-color: var(--flare);
+  background: var(--flare-glow);
   font-weight: 500;
-  letter-spacing: 0.16em;
-  padding: 0 26px;
+  font-size: var(--t-lead);
+  letter-spacing: 0.14em;
+  padding: 0 34px;
+  height: 56px;
 }
-.primary:hover:not(:disabled) { border-color: var(--flare); background: rgba(255, 106, 26, 0.08); }
+.primary:hover:not(:disabled) { background: rgba(255, 106, 26, 0.2); border-color: var(--flare); }
 .primary:active:not(:disabled) { background: var(--flare); color: var(--void); }
 .primary:disabled { color: var(--dim); border-color: var(--line); background: transparent; }
 
-.icon { flex: none; width: 44px; padding: 0; font-size: var(--t-body); }
+.icon { flex: none; width: 46px; padding: 0; }
 
-/* ------------------------------------------------------------------ seed -
-
-   A serial number stamped on an instrument: large, letter-spaced, a hairline
-   underneath, and no box around it. */
+/* ------------------------------------------------------------------ seed - */
 
 .serial {
   display: flex;
@@ -231,11 +205,11 @@ button:disabled { color: var(--line); border-color: var(--line); cursor: default
   gap: 10px;
   flex: 1 1 240px;
   min-width: 0;
-  border-bottom: 1px solid var(--line);
-  height: 44px;
+  border-bottom: 1px solid var(--line-hi);
+  height: 56px;
 }
 .serial:focus-within { border-bottom-color: var(--flare); }
-.serial label { color: var(--dim); font-size: var(--t-micro); flex: none; }
+.serial label { color: var(--mute); font-size: var(--t-micro); flex: none; }
 .serial input {
   flex: 1;
   min-width: 0;
@@ -246,132 +220,89 @@ button:disabled { color: var(--line); border-color: var(--line); cursor: default
   letter-spacing: 0.14em;
   padding: 0;
 }
-.serial .icon { border: 0; width: 32px; color: var(--dim); }
+.serial .icon { border: 0; width: 34px; color: var(--mute); height: 34px; }
 .serial .icon:hover { color: var(--flare); }
 
 /* ------------------------------------------------------------------ stamp -
+   Tempo, key, length. Sample rate, bar count and form name are engine
+   internals and live behind the technical toggle. */
 
-   One dense line. It should read as a panel stamp, not as content. */
+.stamp { margin: 18px 0 0; color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 
-.stamp {
-  margin: 18px 0 0;
-  padding-top: 9px;
-  border-top: 1px solid var(--line);
-  color: var(--dim);
-  font-size: var(--t-micro);
-  letter-spacing: 0.04em;
-}
+/* ----------------------------------------------------------------- buses - */
 
-/* ----------------------------------------------------------------- buses -
-
-   Hairline divisions, no boxes. Locking fills a tick on the rule and lifts the
-   name to full contrast; six orange boxes would not be scarcity. */
-
-.lanes { margin: 22px 0 0; }
+.lanes { margin: 24px 0 0; }
 .lane {
   display: grid;
-  grid-template-columns: 26px 78px 1fr 54px;
+  grid-template-columns: 26px 74px 1fr;
   align-items: center;
   gap: 12px;
   padding: 5px 0;
-  border-bottom: 1px solid var(--line);
 }
-.lane:last-child { border-bottom: 0; }
-.lock {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  display: grid;
-  place-items: center;
-}
-.lock::before {
-  content: "";
-  display: block;
-  width: 3px;
-  height: 16px;
-  background: var(--line);
-}
-.lock:hover::before { background: var(--dim); }
+.lock { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; }
+.lock::before { content: ""; display: block; width: 3px; height: 16px; background: var(--line-hi); }
+.lock:hover::before { background: var(--mute); }
 .lock[aria-pressed="true"]::before { background: var(--flare); }
 .lock:focus-visible { outline: 2px solid var(--flare); outline-offset: 1px; }
-.lane .name { color: var(--dim); font-size: var(--t-micro); }
+.lane .name { color: var(--mute); font-size: var(--t-micro); }
 .lane[data-locked="true"] .name { color: var(--text); }
-.lane canvas { display: block; width: 100%; height: 18px; }
+.lane canvas { display: block; width: 100%; height: 16px; }
 .lane .db { color: var(--dim); font-size: var(--t-micro); text-align: right; }
 
 /* --------------------------------------------------------------- sliders - */
 
-.words { margin: 22px 0 0; }
-.word {
-  display: grid;
-  grid-template-columns: 78px 1fr 128px;
-  align-items: center;
-  gap: 12px;
-  padding: 3px 0;
-}
-.word > label { color: var(--dim); font-size: var(--t-micro); }
+.words { margin: 24px 0 0; }
+.word { display: grid; grid-template-columns: 74px 1fr 132px; align-items: center; gap: 12px; padding: 3px 0; }
+.word > label { color: var(--mute); font-size: var(--t-micro); }
 .word .value { color: var(--text); font-size: var(--t-micro); text-align: right; }
 
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  background: transparent;
-  height: 30px;
-  margin: 0;
-}
-input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line); }
-input[type="range"]::-moz-range-track { height: 1px; background: var(--line); }
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 3px;
-  height: 16px;
-  background: var(--text);
-  border: 0;
-  border-radius: 0;
-  margin-top: -7px;
-}
-input[type="range"]::-moz-range-thumb {
-  width: 3px; height: 16px; background: var(--text); border: 0; border-radius: 0;
-}
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; background: transparent; height: 30px; margin: 0; }
+input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line-hi); }
+input[type="range"]::-moz-range-track { height: 1px; background: var(--line-hi); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 16px; background: var(--text); border: 0; border-radius: 0; margin-top: -7px; }
+input[type="range"]::-moz-range-thumb { width: 3px; height: 16px; background: var(--text); border: 0; border-radius: 0; }
 input[type="range"]:hover::-webkit-slider-thumb { background: var(--flare); }
 input[type="range"]:hover::-moz-range-thumb { background: var(--flare); }
 
 /* ----------------------------------------------------------------- files - */
 
-.files { display: flex; gap: 10px; margin: 22px 0 0; flex-wrap: wrap; }
+.files { display: flex; gap: 12px; margin: 24px 0 0; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------ technical --
+   Everything a listener did not ask for. Off by default, remembered only in
+   memory, and named for what it is rather than as a debug panel. */
+
+.tech { margin: 30px 0 0; border-top: 1px solid var(--line); padding-top: 12px; }
+.tech > summary {
+  cursor: pointer;
+  color: var(--mute);
+  font-size: var(--t-micro);
+  list-style: none;
+  padding: 4px 0;
+}
+.tech > summary::-webkit-details-marker { display: none; }
+.tech > summary::before { content: "+ "; color: var(--dim); }
+.tech[open] > summary::before { content: "\2212 "; }
+.tech > summary:hover { color: var(--text); }
+.techbody { padding: 10px 0 0; color: var(--mute); font-size: var(--t-micro); line-height: 1.9; }
+.techbody dl { display: grid; grid-template-columns: 130px 1fr; gap: 0 14px; margin: 0; }
+.techbody dt { color: var(--dim); }
+.techbody dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
 
 footer {
-  margin: 40px 0 0;
+  margin: 44px 0 0;
   padding: 16px 0 0;
   border-top: 1px solid var(--line);
-  color: var(--dim);
+  color: var(--mute);
   font-size: var(--t-micro);
-  max-width: 60ch;
+  max-width: 62ch;
 }
-footer a { color: var(--dim); }
+footer a { color: var(--mute); }
 
-/* An alert earns a rule, not a box. */
-.problem {
-  border-left: 2px solid var(--flare);
-  padding: 2px 0 2px 12px;
-  margin: 16px 0 0;
-  max-width: 60ch;
-}
+.problem { border-left: 2px solid var(--flare); padding: 2px 0 2px 12px; margin: 16px 0 0; max-width: 60ch; }
 .problem b { color: var(--flare); font-weight: 500; display: block; margin-bottom: 3px; }
 
-.sr {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 [hidden] { display: none !important; }
 
 /* ------------------------------------------------------------------ prose */
@@ -393,13 +324,16 @@ table.tracks td a { text-decoration: none; }
 table.tracks td a:hover { text-decoration: underline; }
 
 @media (max-width: 620px) {
-  :root { --edge: 16px; --t-read: 17px; }
-  .scope canvas { height: 34vh; min-height: 180px; }
-  .lane { grid-template-columns: 22px 62px 1fr 48px; gap: 8px; }
-  .word { grid-template-columns: 62px 1fr 104px; gap: 8px; }
-  nav { width: 100%; margin-left: 0; }
-  .ruler { height: 44px; }
-  .primary { padding: 0 18px; letter-spacing: 0.1em; }
+  :root { --edge: 16px; --t-read: 18px; }
+  .scope { padding: 16px 0 6px; }
+  .scope canvas { height: 30vh; min-height: 170px; }
+  .lane { grid-template-columns: 22px 58px 1fr; gap: 10px; }
+  .word { grid-template-columns: 58px 1fr 108px; gap: 10px; }
+  nav { width: 100%; margin-left: 0; gap: 14px; }
+  .primary { padding: 0 22px; letter-spacing: 0.1em; }
+  .transport { gap: 10px; }
+  .serial { flex-basis: 100%; }
+  .nowbar { min-height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

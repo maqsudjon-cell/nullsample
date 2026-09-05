@@ -108,6 +108,9 @@ const elTime = $<HTMLSpanElement>("time");
 const elDuration = $<HTMLSpanElement>("duration");
 const elState = $<HTMLSpanElement>("statelabel");
 const elStamp = $<HTMLParagraphElement>("stamp");
+const elNow = $<HTMLSpanElement>("nowname");
+const elTechList = $<HTMLDListElement>("techlist");
+const elTech = $<HTMLDetailsElement>("tech");
 const elLanes = $<HTMLDivElement>("lanes");
 const elWav = $<HTMLButtonElement>("wav");
 const elStems = $<HTMLButtonElement>("stems");
@@ -199,7 +202,11 @@ function generate(): void {
   clearProblem();
   gen++;
   stopPlayback();
+  // The waveform clears and redraws as the new track arrives. This is the
+  // action people repeat most, so it should feel like something happening.
   track = null;
+  shownSection = "";
+  elNow.textContent = "";
   scheduledSamples = 0;
   probe.maxBufferPeak = 0;
   probe.scheduledInPast = 0;
@@ -232,6 +239,9 @@ function startTrack(info: PlanInfo): void {
   };
   renderStamp(info);
   renderRuler(info);
+  // show the opening section immediately, rather than waiting for the first
+  // animation frame - the name is part of the track appearing, not of playback
+  highlightMark(0);
   renderLanes(info);
   elDuration.textContent = clock(info.totalSamples / info.sampleRate);
 }
@@ -628,40 +638,42 @@ function drawScope(playhead = -1): void {
   const flare = css.getPropertyValue("--flare").trim() || "#ff6a1a";
   const pad = 12;
   const height = mid - pad;
-  // a gutter on the left so the amplitude labels sit beside the trace, not on it
-  const gutter = 26;
+  // a gutter for the amplitude labels, only when they are shown
+  const gutter = elTech.open ? 26 : 0;
   const plotW = w - gutter;
 
-  g.font = `11px ${css.getPropertyValue("--mono").trim() || "monospace"}`;
+  g.font = `12px ${css.getPropertyValue("--mono").trim() || "monospace"}`;
   g.textBaseline = "middle";
 
-  // --- amplitude scale ---------------------------------------------------
-  // Real values, not a decorative texture: the grid is what makes the page an
-  // instrument rather than a picture of one.
-  const amps: [number, string][] = [
-    [1, "1.0"],
-    [0.5, "0.5"],
-    [0, "0"],
-    [-0.5, "0.5"],
-    [-1, "1.0"],
-  ];
-  g.strokeStyle = line;
-  g.lineWidth = 1;
-  for (const [v, label] of amps) {
-    const y = Math.round(mid - v * height) + 0.5;
-    g.beginPath();
-    g.moveTo(gutter, y);
-    g.lineTo(w, y);
-    g.stroke();
-    g.fillStyle = v === 0 ? dim : line;
-    g.fillText(label, 2, y);
+  // The measurement furniture - amplitude values, time ticks, section rules -
+  // only appears when someone has asked for it. A listener wants a waveform,
+  // not an oscilloscope.
+  const technical = elTech.open;
+
+  if (technical) {
+    const amps: [number, string][] = [[1, "1.0"], [0.5, "0.5"], [0, "0"], [-0.5, "0.5"], [-1, "1.0"]];
+    g.strokeStyle = line;
+    g.lineWidth = 1;
+    for (const [v, label] of amps) {
+      const y = Math.round(mid - v * height) + 0.5;
+      g.beginPath();
+      g.moveTo(gutter, y);
+      g.lineTo(w, y);
+      g.stroke();
+      g.fillStyle = v === 0 ? dim : line;
+      g.fillText(label, 2, y);
+    }
   }
 
   if (!track) {
-    // The empty state is the instrument at rest: the scale is already there,
-    // waiting for a signal. An invitation, not a placeholder.
-    g.fillStyle = dim;
-    g.fillText("press generate", gutter + plotW / 2 - 42, mid - 18);
+    // An invitation to act, not a placeholder: a flat line waiting for a
+    // signal, which is exactly what the product is about to put there.
+    g.strokeStyle = line;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(gutter, mid + 0.5);
+    g.lineTo(w, mid + 0.5);
+    g.stroke();
     return;
   }
 
@@ -671,11 +683,11 @@ function drawScope(playhead = -1): void {
   const buckets = Math.ceil(total / chunk) * PEAKS_PER_CHUNK;
   const filledBuckets = Math.ceil((track.filled / chunk) * PEAKS_PER_CHUNK);
 
-  // --- time scale --------------------------------------------------------
+  // --- time scale, technical only ---------------------------------------
   const durationSec = total / sr;
   const step = durationSec > 150 ? 30 : durationSec > 60 ? 15 : 10;
   g.strokeStyle = line;
-  for (let t = step; t < durationSec; t += step) {
+  for (let t = step; technical && t < durationSec; t += step) {
     const x = Math.round(gutter + (t / durationSec) * plotW) + 0.5;
     g.beginPath();
     g.moveTo(x, mid - height);
@@ -688,14 +700,16 @@ function drawScope(playhead = -1): void {
     g.fillText(label, x + 4, mid + height - 8);
   }
 
-  // --- section boundaries ------------------------------------------------
-  g.strokeStyle = line;
-  for (const s of track.info.sections) {
-    const x = Math.round(gutter + (s.startSample / total) * plotW) + 0.5;
-    g.beginPath();
-    g.moveTo(x, mid - height);
-    g.lineTo(x, mid + height);
-    g.stroke();
+  // --- section boundaries, technical only --------------------------------
+  if (technical) {
+    g.strokeStyle = line;
+    for (const s of track.info.sections) {
+      const x = Math.round(gutter + (s.startSample / total) * plotW) + 0.5;
+      g.beginPath();
+      g.moveTo(x, mid - height);
+      g.lineTo(x, mid + height);
+      g.stroke();
+    }
   }
 
   // --- the trace ---------------------------------------------------------
@@ -730,24 +744,34 @@ function drawScope(playhead = -1): void {
   }
 }
 
+/**
+ * The timeline ruler: ticks only.
+ *
+ * Every section label cannot fit, and trying is what produced "introbuild",
+ * "breakdrop2" and a clipped "outro" in the live build. The ticks carry the
+ * boundaries; the name of the current section is shown once, large, above.
+ */
 function renderRuler(info: PlanInfo): void {
   const total = info.totalSamples;
-  const barsPerSample = 1 / info.chunkSize;
   const parts: string[] = ['<div class="playhead" id="playhead" style="left:0;display:none"></div>'];
   for (const s of info.sections) {
     const pct = (s.startSample / total) * 100;
-    const bar = Math.round(s.startSample * barsPerSample) + 1;
-    parts.push(`<div class="tick" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%"></div>`);
     parts.push(
-      `<div class="lab" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%">` +
-        `${escapeHtml(s.name)}<b>${bar}</b></div>`,
+      `<div class="tick" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%"></div>`,
     );
   }
   elRuler.innerHTML = parts.join("");
 }
 
+let shownSection = "";
+
+/**
+ * One name at a time, swapped as the playhead crosses a boundary, so the
+ * structure is something you feel rather than something you decode.
+ */
 function highlightMark(pos: number): void {
   const total = track ? track.info.totalSamples : 0;
+  let current = "";
   for (const el of Array.from(elRuler.children) as HTMLElement[]) {
     if (el.classList.contains("playhead")) {
       if (total > 0 && state !== "idle") {
@@ -758,12 +782,29 @@ function highlightMark(pos: number): void {
     }
     const from = Number(el.dataset.start);
     const to = Number(el.dataset.end);
-    el.classList.toggle("live", pos >= from && pos < to);
+    const live = pos >= from && pos < to;
+    el.classList.toggle("live", live);
+    if (live && track) {
+      const sec = track.info.sections.find((x) => x.startSample === from);
+      if (sec) current = sec.name;
+    }
+  }
+  if (current && current !== shownSection) {
+    shownSection = current;
+    if (reducedMotion) {
+      elNow.textContent = current;
+    } else {
+      elNow.classList.add("swap");
+      window.setTimeout(() => {
+        elNow.textContent = current;
+        elNow.classList.remove("swap");
+      }, 150);
+    }
   }
 }
 
-function renderStamp(info: PlanInfo): void {
-  const scale = info.scale
+function prettyScale(name: string): string {
+  return name
     .replace(/([A-Z])/g, " $1")
     .toLowerCase()
     .trim()
@@ -772,14 +813,41 @@ function renderStamp(info: PlanInfo): void {
     .replace("minor pentatonic", "min pent")
     .replace("phrygian dominant", "phryg dom")
     .replace("aeolian sharp4", "aeolian #4");
-  const parts = [
+}
+
+/**
+ * Tempo, key, length. Sample rate, bar count and arrangement name are engine
+ * internals: someone who wants a track does not need them to get one, and
+ * they go behind the technical toggle.
+ */
+function renderStamp(info: PlanInfo): void {
+  const secs = info.totalSamples / info.sampleRate;
+  elStamp.textContent = [
     `${info.tempo.toFixed(1)} BPM`,
-    `${info.key} ${scale.toUpperCase()}`,
-    `${info.bars} BARS`,
-    `${(info.sampleRate / 1000).toFixed(1)} kHz`,
-    info.arrangement,
+    `${info.key} ${prettyScale(info.scale).toUpperCase()}`,
+    clock(secs),
+  ].join("  \u00B7  ");
+  renderTech(info);
+}
+
+function renderTech(info: PlanInfo): void {
+  const rows: [string, string][] = [
+    ["arrangement", info.arrangement],
+    ["bars", String(info.bars)],
+    ["sample rate", `${(info.sampleRate / 1000).toFixed(1)} kHz`],
+    ["sections", info.sections.map((x) => x.name).join(" ")],
   ];
-  elStamp.textContent = parts.join("  \u00B7  ");
+  if (track) {
+    for (const bus of info.buses) {
+      const peak = track.busPeaks[bus];
+      if (peak !== undefined && peak > 0) {
+        rows.push([`${BUS_LABELS[bus] ?? bus} peak`, `${(20 * Math.log10(peak)).toFixed(1)} dBFS`]);
+      }
+    }
+  }
+  elTechList.innerHTML = rows
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
+    .join("");
 }
 
 function renderLanes(info: PlanInfo): void {
@@ -796,7 +864,6 @@ function renderLanes(info: PlanInfo): void {
             aria-label="Lock the ${label} bus, so rerolling keeps it"></button>
           <span class="name">${label}</span>
           <canvas data-bus="${bus}" aria-hidden="true"></canvas>
-          <span class="db" data-bus="${bus}">&mdash;</span>
         </div>`;
       })
       .join("");
@@ -805,18 +872,52 @@ function renderLanes(info: PlanInfo): void {
     }
   }
   for (const bus of info.buses) {
-    const peak = track?.busPeaks[bus];
-    const db = elLanes.querySelector<HTMLElement>(`.db[data-bus="${bus}"]`);
-    if (db) {
-      db.textContent = peak !== undefined && peak > 0
-        ? `${(20 * Math.log10(peak)).toFixed(1)}`
-        : "—";
-    }
+    drawLane(bus, info);
     const lane = elLanes.querySelector<HTMLElement>(`.lane[data-bus="${bus}"]`);
     const locked = locks[bus] !== undefined;
     if (lane) lane.dataset.locked = String(locked);
     const btn = elLanes.querySelector<HTMLButtonElement>(`.lock[data-bus="${bus}"]`);
     if (btn) btn.setAttribute("aria-pressed", String(locked));
+  }
+}
+
+/**
+ * The lane strip: where in the track this part actually plays.
+ *
+ * Real structure, not a level meter - it answers "what does the arp do?"
+ * without a number, and it makes locking a part mean something you can see.
+ */
+function drawLane(bus: string, info: PlanInfo): void {
+  const c = elLanes.querySelector<HTMLCanvasElement>(`canvas[data-bus="${bus}"]`);
+  if (!c) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = c.clientWidth;
+  const h = c.clientHeight;
+  if (w === 0 || h === 0) return;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  if (!g) return;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue("--line").trim();
+  const locked = locks[bus] !== undefined;
+  const active = locked
+    ? css.getPropertyValue("--flare").trim()
+    : css.getPropertyValue("--line-hi").trim();
+  const total = info.totalSamples;
+  const y = Math.round(h / 2) - 1;
+  g.fillStyle = line;
+  g.fillRect(0, y, w, 2);
+  g.fillStyle = active;
+  for (const s of info.sections) {
+    if (!s.buses.includes(bus)) continue;
+    const x = (s.startSample / total) * w;
+    const bw = ((s.endSample - s.startSample) / total) * w;
+    g.fillRect(x, y - 3, Math.max(1, bw - 1.5), 8);
   }
 }
 
@@ -1111,10 +1212,18 @@ elSeed.addEventListener("change", () => {
     elSeed.value = seed;
   }
 });
+elTech.addEventListener("toggle", () => {
+  drawScope(track ? currentSample() : -1);
+});
 elWav.addEventListener("click", downloadWav);
 elStems.addEventListener("click", requestStems);
 
-window.addEventListener("resize", () => drawScope(track ? currentSample() : -1));
+window.addEventListener("resize", () => {
+  drawScope(track ? currentSample() : -1);
+  // the lane strips are canvases too, and a zero-width first layout leaves
+  // them empty until something asks them to redraw
+  if (track) for (const bus of track.info.buses) drawLane(bus, track.info);
+});
 
 // A7: coming back from a lock screen or another app. Resuming may need a fresh
 // gesture, in which case say so rather than pretending to play.

@@ -50,10 +50,9 @@
   <div class="bleed">
     <div class="inner">
       <div class="ruler" id="ruler" aria-hidden="true"></div>
-      <div class="axis">
-        <span id="time">00:00</span>
-        <span class="state" id="statelabel">ready</span>
-        <span id="duration">--:--</span>
+      <div class="nowbar">
+        <span class="nowname" id="nowname">&nbsp;</span>
+        <span class="nowtimes"><b id="time">00:00</b> / <span id="duration">--:--</span> &nbsp; <span id="statelabel">ready</span></span>
       </div>
 
       <div class="transport">
@@ -75,7 +74,7 @@
 
       <p class="stamp" id="stamp">no track yet</p>
 
-      <h2 class="sr">Buses</h2>
+      <h2 class="sr">Parts</h2>
       <div class="lanes" id="lanes"></div>
 
       <h2 class="sr">Sound</h2>
@@ -85,6 +84,13 @@
         <button type="button" id="wav" disabled>WAV</button>
         <button type="button" id="stems" disabled>STEMS</button>
       </div>
+
+      <details class="tech" id="tech">
+        <summary>technical readout</summary>
+        <div class="techbody">
+          <dl id="techlist"></dl>
+        </div>
+      </details>
 
       <div class="sr" id="live" role="status" aria-live="polite"></div>
 

@@ -17,7 +17,7 @@ export interface PlanInfo {
   totalSamples: number;
   sampleRate: number;
   chunkSize: number;
-  sections: { name: string; startSample: number; endSample: number }[];
+  sections: { name: string; startSample: number; endSample: number; buses: string[] }[];
   buses: string[];
 }
 

@@ -73,10 +73,11 @@ async function render(msg: Extract<ToWorker, { type: "render" }>): Promise<void>
     totalSamples: renderer.totalSamples,
     sampleRate: msg.sampleRate,
     chunkSize: renderer.chunkSize,
-    sections: plan.sections.map((s) => ({
+    sections: plan.arrangement.sections.map((s) => ({
       name: s.name,
-      startSample: s.startSample,
-      endSample: s.endSample,
+      startSample: s.startBar * plan.samplesPerBar,
+      endSample: (s.startBar + s.bars) * plan.samplesPerBar,
+      buses: [...s.buses],
     })),
     buses: [...preset.buses],
   };
