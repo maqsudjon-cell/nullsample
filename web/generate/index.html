@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generate a track — Nullsample</title>
+<meta name="description" content="Generate an original track from a seed. Synthesised in your browser from oscillators, noise and filters — no samples. Lock a bus, reroll the rest, download WAV or stems.">
+<link rel="canonical" href="https://nullsample.maqsudjon.com/generate/">
+<meta name="theme-color" content="#08090C">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Generate a track — Nullsample">
+<meta property="og:description" content="Generate an original track from a seed, synthesised in your browser from code. No samples.">
+<meta property="og:image" content="https://nullsample.maqsudjon.com/og-default.png">
+<meta property="og:url" content="https://nullsample.maqsudjon.com/generate/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nullsample">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Generate a track — Nullsample">
+<meta name="twitter:description" content="Generate an original track from a seed, synthesised in your browser from code. No samples.">
+<meta name="twitter:image" content="https://nullsample.maqsudjon.com/og-default.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+    <path d="M3 16 L14 16" stroke="#7A8391" stroke-width="2.6" fill="none"/>
+    <path d="M17 25 L17 7 L29 25" stroke="#FF6A1A" stroke-width="2.6" fill="none" stroke-linejoin="miter"/>
+  </svg>
+  <a class="wordmark" href="/" style="text-decoration:none;color:inherit">NULLSAMPLE</a>
+  <span class="tag">zero samples</span>
+  <nav>
+    <a href="/">home</a>
+    <a href="/generate/" aria-current="page">generator</a>
+    <a href="/how-it-works/">how it works</a>
+    <a href="/tracks/">tracks</a>
+  </nav>
+</header>
+
+<main>
+  <div class="scope bleed">
+    <canvas id="scope" role="img" aria-label="Waveform of the generated track, drawn as it renders"></canvas>
+  </div>
+
+  <div class="bleed">
+    <div class="inner">
+      <div class="ruler" id="ruler" aria-hidden="true"></div>
+      <div class="axis">
+        <span id="time">00:00</span>
+        <span class="state" id="statelabel">ready</span>
+        <span id="duration">--:--</span>
+      </div>
+
+      <div class="transport">
+        <button type="button" id="generate" class="primary">GENERATE</button>
+        <button type="button" id="play" class="icon" aria-label="Play" disabled>&#9654;</button>
+        <div class="serial">
+          <label for="seed">seed</label>
+          <input id="seed" type="text" spellcheck="false" autocomplete="off"
+                 aria-describedby="seedhelp" value="">
+          <button type="button" id="dice" class="icon" aria-label="Generate a new random seed">&#8635;</button>
+        </div>
+      </div>
+      <p class="sr" id="seedhelp">The seed determines the track. The same seed always produces the same audio.</p>
+
+      <div class="problem" id="problem" hidden>
+        <b>The render stopped.</b>
+        <p id="problemtext"></p>
+      </div>
+
+      <p class="stamp" id="stamp">no track yet</p>
+
+      <h2 class="sr">Buses</h2>
+      <div class="lanes" id="lanes"></div>
+
+      <h2 class="sr">Sound</h2>
+      <div class="words" id="words"></div>
+
+      <div class="files">
+        <button type="button" id="wav" disabled>WAV</button>
+        <button type="button" id="stems" disabled>STEMS</button>
+      </div>
+
+      <div class="sr" id="live" role="status" aria-live="polite"></div>
+
+      <footer>
+        <p>Audio is synthesised on your device and never uploaded. Analytics are cookieless and
+        count page views only. <a href="/how-it-works/">How it works</a> ·
+        <a href="https://github.com/maqsudjon-cell/nullsample">Source</a></p>
+      </footer>
+    </div>
+  </div>
+</main>
+
+<script type="module" src="/generate/app.js"></script>
+<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

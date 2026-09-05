@@ -74,18 +74,21 @@ a:hover { color: var(--flare); }
   margin: 0 auto;
   padding: 0 var(--edge) 64px;
 }
+/* the waveform escapes the column; everything else stays in it */
+.bleed { width: 100%; }
+.bleed .inner { max-width: 1000px; margin: 0 auto; padding: 0 var(--edge); }
 
 /* ------------------------------------------------------------------ head - */
 
 header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--gap);
-  padding: 18px 0 22px;
+  padding: 14px var(--edge);
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
 }
-.mark { display: block; width: 22px; height: 22px; flex: none; align-self: center; }
+.mark { display: block; width: 22px; height: 22px; flex: none; }
 .wordmark {
   font-weight: 500;
   font-size: var(--t-lead);
@@ -97,104 +100,137 @@ nav { margin-left: auto; display: flex; gap: 16px; }
 nav a { color: var(--dim); text-decoration: none; font-size: var(--t-micro); }
 nav a:hover, nav a[aria-current="page"] { color: var(--text); }
 
-/* -------------------------------------------------------------- waveform - */
+/* --------------------------------------------------------------- waveform -
+
+   Full bleed, and the dominant element on the page. The grid is drawn into
+   the canvas at real amplitude and time values rather than being a texture
+   laid behind it, so the graph paper is actually measuring something. */
 
 .scope {
   position: relative;
-  margin: 22px 0 0;
+  width: 100%;
   border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  /* dot matrix: the instrument's graph paper */
-  background-image: radial-gradient(var(--line) 1px, transparent 1px);
-  background-size: 14px 14px;
-  background-position: 0 0;
 }
 .scope canvas {
   display: block;
   width: 100%;
-  height: 240px;
+  height: 46vh;
+  min-height: 240px;
+  max-height: 460px;
 }
-.marks {
-  display: flex;
-  height: 18px;
-  border-bottom: 1px solid var(--line);
-  overflow: hidden;
+
+/* ----------------------------------------------------------------- ruler -
+
+   Hairline ticks carry the section boundaries, so the labels beneath them are
+   free to be short and can never clip. Bar numbers because this is a musical
+   instrument and the bar is its unit. */
+
+.ruler {
+  position: relative;
+  height: 42px;
+  border-top: 1px solid var(--line);
+  margin-bottom: 10px;
+  /* aligned to the waveform's plot area, past the amplitude gutter */
+  margin-left: 26px;
 }
-.marks span {
+.ruler .tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-0.5px);
+  border-left: 1px solid var(--line);
+  height: 7px;
+  pointer-events: none;
+}
+.ruler .tick.live { border-left-color: var(--flare); height: 40px; }
+.ruler .lab {
+  position: absolute;
+  top: 9px;
   font-size: var(--t-micro);
   color: var(--dim);
   padding-left: 5px;
-  border-left: 1px solid var(--line);
   white-space: nowrap;
-  overflow: hidden;
-  line-height: 17px;
-  flex: none;
+  line-height: 1.25;
 }
-.marks span:first-child { border-left: 0; padding-left: 0; }
-.marks span.live { color: var(--flare); }
+.ruler .lab.live { color: var(--flare); }
+/* Bar numbers are the instrument's native unit, so they have to be readable.
+   --line is a hairline colour, not a text colour. */
+.ruler .lab b { display: block; font-weight: 400; color: var(--dim); opacity: 0.7; }
+.ruler .lab.live b { color: var(--flare); opacity: 1; }
+.ruler .playhead {
+  position: absolute;
+  top: 0;
+  height: 40px;
+  border-left: 1px solid var(--flare);
+  pointer-events: none;
+}
 
 .axis {
   display: flex;
   justify-content: space-between;
-  padding: 7px 0 0;
+  align-items: baseline;
   font-size: var(--t-micro);
   color: var(--dim);
+  padding-top: 8px;
 }
 .axis .state { color: var(--text); }
 
-/* ------------------------------------------------------------- transport - */
+/* ------------------------------------------------------------- transport -
+
+   One line, aligned to the waveform edges, everything the same height. */
 
 .transport {
   display: flex;
-  gap: var(--gap);
-  align-items: stretch;
-  margin: 20px 0 0;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0 0;
   flex-wrap: wrap;
 }
 
 button {
   font: 400 var(--t-body) / 1 var(--mono);
-  background: var(--panel);
+  background: transparent;
   color: var(--text);
   border: 1px solid var(--line);
-  padding: 0 16px;
-  min-height: 44px;
+  padding: 0 15px;
+  height: 44px;
   cursor: pointer;
   letter-spacing: 0.04em;
 }
 button:hover:not(:disabled) { border-color: var(--dim); }
-button:disabled { color: var(--dim); cursor: default; }
+button:active:not(:disabled) { background: var(--panel); }
+button:disabled { color: var(--line); border-color: var(--line); cursor: default; }
 
-/* the primary action is the widest control on the page, and the only place
-   --flare is used as a fill */
+/* The primary action leads by position, weight and space - not by area. A
+   full-width solid bar of the accent is the opposite of accent scarcity. */
 .primary {
-  flex: 1 1 320px;
-  background: var(--flare);
-  color: var(--void);
+  color: var(--flare);
   border-color: var(--flare);
   font-weight: 500;
-  font-size: var(--t-lead);
-  letter-spacing: 0.1em;
-  min-height: 56px;
+  letter-spacing: 0.16em;
+  padding: 0 26px;
 }
-.primary:hover:not(:disabled) { filter: brightness(1.12); border-color: var(--flare); }
-.primary:disabled { background: var(--panel); color: var(--dim); border-color: var(--line); }
+.primary:hover:not(:disabled) { border-color: var(--flare); background: rgba(255, 106, 26, 0.08); }
+.primary:active:not(:disabled) { background: var(--flare); color: var(--void); }
+.primary:disabled { color: var(--dim); border-color: var(--line); background: transparent; }
 
-.icon { flex: none; width: 52px; padding: 0; font-size: var(--t-lead); }
+.icon { flex: none; width: 44px; padding: 0; font-size: var(--t-body); }
 
-/* ------------------------------------------------------------------ seed - */
+/* ------------------------------------------------------------------ seed -
+
+   A serial number stamped on an instrument: large, letter-spaced, a hairline
+   underneath, and no box around it. */
 
 .serial {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 260px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  padding: 0 12px;
-  min-height: 56px;
+  flex: 1 1 240px;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  height: 44px;
 }
-.serial label { color: var(--dim); font-size: var(--t-micro); }
+.serial:focus-within { border-bottom-color: var(--flare); }
+.serial label { color: var(--dim); font-size: var(--t-micro); flex: none; }
 .serial input {
   flex: 1;
   min-width: 0;
@@ -202,65 +238,73 @@ button:disabled { color: var(--dim); cursor: default; }
   border: 0;
   color: var(--text);
   font: 500 var(--t-read) / 1 var(--mono);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   padding: 0;
 }
-.serial input:focus-visible { outline-offset: 4px; }
+.serial .icon { border: 0; width: 32px; color: var(--dim); }
+.serial .icon:hover { color: var(--flare); }
 
-/* ------------------------------------------------------------------ meta - */
+/* ------------------------------------------------------------------ stamp -
 
-.readout {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 1px;
+   One dense line. It should read as a panel stamp, not as content. */
+
+.stamp {
   margin: 18px 0 0;
-  background: var(--line);
-  border: 1px solid var(--line);
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
 }
-.readout div { background: var(--void); padding: 9px 11px; }
-.readout dt { color: var(--dim); font-size: var(--t-micro); margin: 0; }
-.readout dd { margin: 2px 0 0; font-size: var(--t-body); }
 
-/* ----------------------------------------------------------------- buses - */
+/* ----------------------------------------------------------------- buses -
 
-.lanes { margin: 26px 0 0; border-top: 1px solid var(--line); }
+   Hairline divisions, no boxes. Locking fills a tick on the rule and lifts the
+   name to full contrast; six orange boxes would not be scarcity. */
+
+.lanes { margin: 22px 0 0; }
 .lane {
   display: grid;
-  grid-template-columns: 44px 84px 1fr 62px;
+  grid-template-columns: 26px 78px 1fr 54px;
   align-items: center;
   gap: 12px;
-  padding: 7px 0;
+  padding: 5px 0;
   border-bottom: 1px solid var(--line);
 }
+.lane:last-child { border-bottom: 0; }
 .lock {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  min-height: 0;
+  border: 0;
+  background: transparent;
   display: grid;
   place-items: center;
-  font-size: var(--t-micro);
-  color: var(--dim);
 }
-.lock[aria-pressed="true"] {
-  background: var(--flare);
-  border-color: var(--flare);
-  color: var(--void);
+.lock::before {
+  content: "";
+  display: block;
+  width: 3px;
+  height: 16px;
+  background: var(--line);
 }
+.lock:hover::before { background: var(--dim); }
+.lock[aria-pressed="true"]::before { background: var(--flare); }
+.lock:focus-visible { outline: 2px solid var(--flare); outline-offset: 1px; }
 .lane .name { color: var(--dim); font-size: var(--t-micro); }
 .lane[data-locked="true"] .name { color: var(--text); }
-.lane canvas { display: block; width: 100%; height: 22px; }
+.lane canvas { display: block; width: 100%; height: 18px; }
 .lane .db { color: var(--dim); font-size: var(--t-micro); text-align: right; }
 
 /* --------------------------------------------------------------- sliders - */
 
-.words { display: grid; gap: 2px; margin: 24px 0 0; }
+.words { margin: 22px 0 0; }
 .word {
   display: grid;
-  grid-template-columns: 84px 1fr 108px;
+  grid-template-columns: 78px 1fr 128px;
   align-items: center;
   gap: 12px;
-  padding: 6px 0;
+  padding: 3px 0;
 }
 .word > label { color: var(--dim); font-size: var(--t-micro); }
 .word .value { color: var(--text); font-size: var(--t-micro); text-align: right; }
@@ -273,52 +317,45 @@ input[type="range"] {
   height: 30px;
   margin: 0;
 }
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 1px;
-  background: var(--line);
-}
+input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line); }
 input[type="range"]::-moz-range-track { height: 1px; background: var(--line); }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 3px;
-  height: 18px;
+  height: 16px;
   background: var(--text);
   border: 0;
   border-radius: 0;
-  margin-top: -8px;
+  margin-top: -7px;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 3px;
-  height: 18px;
-  background: var(--text);
-  border: 0;
-  border-radius: 0;
+  width: 3px; height: 16px; background: var(--text); border: 0; border-radius: 0;
 }
 input[type="range"]:hover::-webkit-slider-thumb { background: var(--flare); }
 input[type="range"]:hover::-moz-range-thumb { background: var(--flare); }
 
 /* ----------------------------------------------------------------- files - */
 
-.files { display: flex; gap: var(--gap); margin: 26px 0 0; flex-wrap: wrap; }
+.files { display: flex; gap: 10px; margin: 22px 0 0; flex-wrap: wrap; }
 
 footer {
-  margin: 44px 0 0;
-  padding: 18px 0 0;
+  margin: 40px 0 0;
+  padding: 16px 0 0;
   border-top: 1px solid var(--line);
   color: var(--dim);
   font-size: var(--t-micro);
-  max-width: 58ch;
+  max-width: 60ch;
 }
 footer a { color: var(--dim); }
 
+/* An alert earns a rule, not a box. */
 .problem {
-  border: 1px solid var(--flare);
-  background: var(--panel);
-  padding: 12px 14px;
-  margin: 18px 0 0;
-  max-width: 58ch;
+  border-left: 2px solid var(--flare);
+  padding: 2px 0 2px 12px;
+  margin: 16px 0 0;
+  max-width: 60ch;
 }
-.problem b { color: var(--flare); font-weight: 500; display: block; margin-bottom: 4px; }
+.problem b { color: var(--flare); font-weight: 500; display: block; margin-bottom: 3px; }
 
 .sr {
   position: absolute;
@@ -351,11 +388,13 @@ table.tracks td a { text-decoration: none; }
 table.tracks td a:hover { text-decoration: underline; }
 
 @media (max-width: 620px) {
-  :root { --edge: 16px; --t-read: 18px; }
-  .scope canvas { height: 176px; }
-  .lane { grid-template-columns: 38px 70px 1fr 54px; gap: 8px; }
-  .word { grid-template-columns: 68px 1fr 92px; gap: 8px; }
+  :root { --edge: 16px; --t-read: 17px; }
+  .scope canvas { height: 34vh; min-height: 180px; }
+  .lane { grid-template-columns: 22px 62px 1fr 48px; gap: 8px; }
+  .word { grid-template-columns: 62px 1fr 104px; gap: 8px; }
   nav { width: 100%; margin-left: 0; }
+  .ruler { height: 44px; }
+  .primary { padding: 0 18px; letter-spacing: 0.1em; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -383,3 +422,112 @@ table.tracks td a:hover { text-decoration: underline; }
 .debugpanel td { padding: 0 0 0 8px; color: var(--text); vertical-align: top; }
 .debugpanel td:first-child { padding: 0; color: var(--dim); white-space: pre; }
 .debugpanel td.bad { color: var(--flare); }
+
+/* =========================================================== landing page ==
+   Same rules as the instrument: hairline divisions, no cards, one thing
+   dominant per screen. The hero waveform is full bleed; everything else sits
+   in the column. */
+
+.inner { max-width: 1000px; margin: 0 auto; padding: 0 var(--edge); }
+
+.hero { padding: 46px 0 0; }
+.hero h1 {
+  font-size: clamp(24px, 4.6vw, 40px);
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+}
+.hero h1 .null { color: var(--flare); }
+.lede { color: var(--dim); max-width: 60ch; margin: 0 0 18px; }
+.fine { color: var(--dim); font-size: var(--t-micro); max-width: 68ch; margin: 12px 0 0; }
+.fine a, .lede a { color: var(--text); }
+
+.herowrap { width: 100%; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.herowrap canvas { display: block; width: 100%; height: 148px; }
+
+.herobar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 14px;
+  padding-bottom: 2px;
+  flex-wrap: wrap;
+}
+.herostat { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-micro); color: var(--dim); }
+.herostat b { color: var(--text); font-weight: 500; letter-spacing: 0.12em; font-size: var(--t-body); }
+.herotime { margin-left: auto; color: var(--dim); font-size: var(--t-micro); }
+
+.band { padding: 44px 0 0; }
+.band h2 {
+  font-size: var(--t-lead);
+  font-weight: 500;
+  margin: 0 0 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.points { list-style: none; padding: 0; margin: 0; max-width: 68ch; }
+.points li { color: var(--dim); padding: 12px 0; border-bottom: 1px solid var(--line); }
+.points li:last-child { border-bottom: 0; }
+.points b { color: var(--text); font-weight: 500; }
+.points.tight li { padding: 8px 0; }
+
+/* ------------------------------------------------------ code beside sound - */
+
+.clip { padding: 18px 0 0; border-top: 1px solid var(--line); margin-top: 18px; }
+.clip:first-child { border-top: 0; margin-top: 0; }
+.clip h3 { font-size: var(--t-body); font-weight: 500; margin: 0 0 6px; }
+.clip .blurb { color: var(--dim); font-size: var(--t-micro); max-width: 68ch; margin: 0 0 14px; }
+.cliprow { display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: start; }
+.code {
+  margin: 0;
+  overflow-x: auto;
+  font-size: var(--t-micro);
+  line-height: 1.65;
+  color: var(--dim);
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+}
+.code .cl { display: block; padding: 0 4px; margin-left: -4px; }
+.code .cl.live { color: var(--text); background: rgba(255, 106, 26, 0.12); box-shadow: inset 2px 0 0 var(--flare); }
+.clipside { display: flex; flex-direction: column; gap: 10px; }
+.clipplay { width: 100%; }
+.stagelabel { color: var(--flare); font-size: var(--t-micro); margin: 0; min-height: 2.6em; }
+.src { color: var(--line); font-size: var(--t-micro); margin: 0; }
+
+/* ------------------------------------------------------------ demo tracks - */
+
+.demos { list-style: none; padding: 0; margin: 0; }
+.demo {
+  display: grid;
+  grid-template-columns: 44px 130px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.demo:last-child { border-bottom: 0; }
+.demoplay { height: 34px; width: 44px; padding: 0; }
+.demoseed { color: var(--text); text-decoration: none; letter-spacing: 0.1em; font-weight: 500; }
+.demoseed:hover { color: var(--flare); }
+.demometa { color: var(--dim); font-size: var(--t-micro); }
+
+.cta-band .inner { padding-top: 18px; border-top: 1px solid var(--line); }
+a.primary {
+  display: inline-block;
+  text-decoration: none;
+  line-height: 44px;
+  height: 44px;
+}
+
+@media (max-width: 720px) {
+  .cliprow { grid-template-columns: 1fr; gap: 12px; }
+  .clipside { flex-direction: row; align-items: center; gap: 12px; }
+  .clipplay { width: auto; flex: none; }
+  .stagelabel { min-height: 0; flex: 1; }
+  .src { display: none; }
+  .demo { grid-template-columns: 40px 1fr; row-gap: 2px; }
+  .demometa { grid-column: 2; }
+  .herowrap canvas { height: 110px; }
+}

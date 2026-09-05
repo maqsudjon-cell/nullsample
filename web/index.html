@@ -4,13 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nullsample — music generated from code, zero samples</title>
-<meta name="description" content="A procedural music generator. Every track is synthesised from oscillators, noise and filters in your browser — no samples, no loops, no models. Type a seed, get the same track every time.">
+<meta name="description" content="Original music synthesised entirely from code — no samples, no loops, no models. Hear it in one tap, then generate your own from a seed. Free, open source, runs in your browser.">
 <link rel="canonical" href="https://nullsample.maqsudjon.com/">
 <meta name="theme-color" content="#08090C">
 <meta name="color-scheme" content="dark">
-
 <meta property="og:title" content="Nullsample — music generated from code, zero samples">
-<meta property="og:description" content="A procedural music generator. Every track is synthesised from oscillators, noise and filters in your browser — no samples, no loops, no models.">
+<meta property="og:description" content="Original music synthesised entirely from code — no samples, no loops, no models. Hear it in one tap, then generate your own from a seed.">
 <meta property="og:image" content="https://nullsample.maqsudjon.com/og-default.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -19,17 +18,14 @@
 <meta property="og:site_name" content="Nullsample">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Nullsample — music generated from code, zero samples">
-<meta name="twitter:description" content="A procedural music generator. Every track is synthesised from oscillators, noise and filters in your browser — no samples, no loops, no models.">
+<meta name="twitter:description" content="Original music synthesised entirely from code — no samples, no loops, no models. Hear it in one tap.">
 <meta name="twitter:image" content="https://nullsample.maqsudjon.com/og-default.png">
-
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-
 <link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
-
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -45,74 +41,133 @@
 </script>
 </head>
 <body>
-<div class="wrap">
 
 <header>
   <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
     <path d="M3 16 L14 16" stroke="#7A8391" stroke-width="2.6" fill="none"/>
     <path d="M17 25 L17 7 L29 25" stroke="#FF6A1A" stroke-width="2.6" fill="none" stroke-linejoin="miter"/>
   </svg>
-  <h1 class="wordmark">NULLSAMPLE</h1>
-  <span class="tag">music generated from code. zero samples.</span>
+  <span class="wordmark">NULLSAMPLE</span>
+  <span class="tag">zero samples</span>
   <nav>
-    <a href="/" aria-current="page">generator</a>
-    <a href="/about/">how it works</a>
+    <a href="/generate/">generator</a>
+    <a href="/how-it-works/">how it works</a>
     <a href="/tracks/">tracks</a>
   </nav>
 </header>
 
 <main>
-  <div class="marks" id="marks" aria-hidden="true"></div>
-  <div class="scope">
-    <canvas id="scope" role="img" aria-label="Waveform of the generated track, drawn as it renders"></canvas>
-  </div>
-  <div class="axis">
-    <span id="time">00:00</span>
-    <span class="state" id="statelabel">ready</span>
-    <span id="duration">--:--</span>
-  </div>
 
-  <div class="transport">
-    <button type="button" id="generate" class="primary">GENERATE</button>
-    <button type="button" id="play" class="icon" aria-label="Play" disabled>▶</button>
-    <div class="serial">
-      <label for="seed">seed</label>
-      <input id="seed" type="text" spellcheck="false" autocomplete="off"
-             inputmode="latin" aria-describedby="seedhelp" value="">
-      <button type="button" id="dice" class="icon" aria-label="New random seed">↻</button>
+  <!-- 1. hero ------------------------------------------------------------ -->
+  <section class="hero">
+    <div class="inner">
+      <h1>Music generated from code.<br><span class="null">Zero samples.</span></h1>
+      <p class="lede">Every sound below was computed from arithmetic — oscillators, noise,
+      envelopes and filters. There is no recorded audio in this software, so there is nothing
+      in a track it makes that belongs to anyone else.</p>
     </div>
-  </div>
-  <p class="sr" id="seedhelp">The seed determines the track. The same seed always produces the same audio.</p>
+    <div class="herowrap">
+      <canvas id="herowave" role="img" aria-label="Waveform of the demo track"></canvas>
+    </div>
+    <div class="inner herobar">
+      <button type="button" id="heroplay" class="primary">&#9654;&nbsp; HEAR IT</button>
+      <span class="herostat"><b id="heroseed">—</b><span id="herometa"></span></span>
+      <span class="herotime" id="herotime">00:00 / 00:00</span>
+      <audio id="heroaudio" preload="none"></audio>
+    </div>
+    <div class="inner">
+      <p class="fine">This one is a pre-rendered excerpt, so it plays instantly.
+      <a id="herolink" href="/generate/">Open this seed in the generator</a> to hear the whole
+      thing synthesised on your own device.</p>
+    </div>
+  </section>
 
-  <div class="problem" id="problem" hidden>
-    <b>The render stopped.</b>
-    <p id="problemtext"></p>
-  </div>
+  <!-- 2. code beside sound ------------------------------------------------ -->
+  <section class="band">
+    <div class="inner">
+      <h2>This is the code. That is the sound it makes.</h2>
+      <p class="lede">Not an illustration — the excerpts below are read straight out of the
+      engine at build time. Press play and hear what that arithmetic does. The line
+      responsible for what you are hearing lights up as it plays.</p>
+      <div id="clips"></div>
+    </div>
+  </section>
 
-  <dl class="readout" id="readout"></dl>
+  <!-- 3. why it matters --------------------------------------------------- -->
+  <section class="band">
+    <div class="inner">
+      <h2>Why that matters</h2>
+      <ul class="points">
+        <li><b>Nothing to license, nobody to sue you.</b> Generators built on sample packs or
+        trained on recordings leave a question about what went in and who owns what comes out.
+        There are no recordings here at all, so the question does not arise.</li>
+        <li><b>A seed reproduces a track exactly.</b> Same seed, same audio, on any machine, in
+        any browser, today or in five years. So you can send someone a seed instead of a file,
+        and ask for a change instead of starting again.</li>
+        <li><b>Stems come out already separated</b> — drums, bass, lead, arp, pads, effects —
+        because the engine never merged them in the first place. No source separation, no
+        artefacts, just the parts as they were synthesised.</li>
+      </ul>
+    </div>
+  </section>
 
-  <h2 class="sr">Buses</h2>
-  <div class="lanes" id="lanes"></div>
+  <!-- 4. who it is for ---------------------------------------------------- -->
+  <section class="band">
+    <div class="inner">
+      <h2>Who it is for</h2>
+      <p class="lede">People who need music they can use without reading a licence first.</p>
+      <ul class="points tight">
+        <li><b>Indie game developers</b> — a loop for a level, and the stems to duck under
+        dialogue.</li>
+        <li><b>Video and podcast creators</b> — beds and stings that will not trip a content
+        claim, because there is no recording to match against.</li>
+        <li><b>Streamers</b> — background music that survives a VOD.</li>
+      </ul>
+    </div>
+  </section>
 
-  <h2 class="sr">Sound</h2>
-  <div class="words" id="words"></div>
+  <!-- 5. demo tracks ------------------------------------------------------ -->
+  <section class="band">
+    <div class="inner">
+      <h2>Four seeds</h2>
+      <p class="lede">Twenty-second excerpts. Open a seed to synthesise the whole track.</p>
+      <ul class="demos" id="demolist"></ul>
+    </div>
+  </section>
 
-  <div class="files">
-    <button type="button" id="wav" disabled>WAV</button>
-    <button type="button" id="stems" disabled>STEMS</button>
-  </div>
+  <!-- 6. cta -------------------------------------------------------------- -->
+  <section class="band cta-band">
+    <div class="inner">
+      <a class="primary cta" href="/generate/">MAKE ONE</a>
+      <p class="fine">Free. No account. Renders on your device — nothing is uploaded, and the
+      first bars start playing in about a second while the rest computes.</p>
+    </div>
+  </section>
 
-  <div class="sr" id="live" role="status" aria-live="polite"></div>
+  <!-- 7. open source ------------------------------------------------------ -->
+  <section class="band">
+    <div class="inner">
+      <h2>Open source</h2>
+      <p class="lede">The engine is on
+      <a href="https://github.com/maqsudjon-cell/nullsample">GitHub</a> under AGPL-3.0. Use it,
+      read it, change it; if you run a modified version as a service, publish your source. A
+      commercial licence covers embedding it in a closed-source product, and the tuned preset
+      ranges are licensed separately from the engine.</p>
+      <p class="lede"><b>Audio you generate is yours either way</b>, including for commercial
+      release. That is not a concession — there is nothing in it to claim.</p>
+    </div>
+  </section>
+
+  <footer class="inner">
+    <p>Audio is synthesised on your device and never uploaded. Analytics are cookieless and
+    count page views only.
+    <a href="/how-it-works/">How it works</a> ·
+    <a href="/tracks/">Tracks</a> ·
+    <a href="https://github.com/maqsudjon-cell/nullsample">Source</a></p>
+  </footer>
 </main>
 
-<footer>
-  <p>Audio is synthesised on your device and never uploaded. Analytics are cookieless and
-  count page views only. <a href="/about/">How it works</a> ·
-  <a href="https://github.com/maqsudjon-cell/nullsample">Source</a></p>
-</footer>
-
-</div>
-<script type="module" src="/app.js"></script>
+<script type="module" src="/landing.js"></script>
 <script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="//gc.zgo.at/count.js"></script>
 </body>
 </html>

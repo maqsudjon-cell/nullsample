@@ -75,8 +75,9 @@ const head = (title, desc, path) => `<!doctype html>
   <a class="wordmark" href="/" style="text-decoration:none;color:inherit">NULLSAMPLE</a>
   <span class="tag">music generated from code. zero samples.</span>
   <nav>
-    <a href="/">generator</a>
-    <a href="/about/">how it works</a>
+    <a href="/">home</a>
+    <a href="/generate/">generator</a>
+    <a href="/how-it-works/">how it works</a>
     <a href="/tracks/" aria-current="page">tracks</a>
   </nav>
 </header>
@@ -104,7 +105,7 @@ everywhere. That is what a seed is for.</p>
 ${rows
   .map(
     (r) => `    <tr>
-      <td><a href="/#s=${encodeURIComponent(r.seed)}">${esc(r.seed)}</a></td>
+      <td><a href="/generate/#s=${encodeURIComponent(r.seed)}">${esc(r.seed)}</a></td>
       <td>${esc(r.tempo)}</td><td>${esc(r.key)}</td><td>${esc(r.form)}</td>
       <td>${r.bars}</td><td>${esc(r.length)}</td>
     </tr>`,

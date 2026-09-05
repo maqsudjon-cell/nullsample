@@ -17,29 +17,25 @@ const DOMAIN = "https://nullsample.maqsudjon.com";
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
-await build({
-  entryPoints: [join(ROOT, "web/app.ts")],
-  bundle: true,
-  format: "esm",
-  target: "es2022",
-  minify: true,
-  sourcemap: false,
-  outfile: join(OUT, "app.js"),
-  loader: { ".json": "json" },
-  logLevel: "warning",
-});
+const bundle = (entry, out) =>
+  build({
+    entryPoints: [join(ROOT, entry)],
+    bundle: true,
+    format: "esm",
+    target: "es2022",
+    minify: true,
+    sourcemap: false,
+    outfile: join(OUT, out),
+    loader: { ".json": "json" },
+    logLevel: "warning",
+  });
 
-await build({
-  entryPoints: [join(ROOT, "web/worker.ts")],
-  bundle: true,
-  format: "esm",
-  target: "es2022",
-  minify: true,
-  sourcemap: false,
-  outfile: join(OUT, "worker.js"),
-  loader: { ".json": "json" },
-  logLevel: "warning",
-});
+// The engine only exists under /generate. The landing page must reach first
+// paint without any of it, which is also what keeps its budget trivially met.
+mkdirSync(join(OUT, "generate"), { recursive: true });
+await bundle("web/app.ts", "generate/app.js");
+await bundle("web/worker.ts", "generate/worker.js");
+await bundle("web/landing.ts", "landing.js");
 
 /**
  * Minifies CSS and inlines it into every page.
@@ -71,9 +67,15 @@ function page(srcPath, outPath) {
 
 // static files
 page(join(ROOT, "web/index.html"), join(OUT, "index.html"));
+page(join(ROOT, "web/generate/index.html"), join(OUT, "generate", "index.html"));
 writeFileSync(join(OUT, "styles.css"), css);
+try {
+  cpSync(join(ROOT, "web/demos"), join(OUT, "demos"), { recursive: true });
+} catch {
+  console.warn("  demo audio missing - run npm run demos");
+}
 cpSync(join(ROOT, "web/fonts"), join(OUT, "fonts"), { recursive: true });
-for (const name of ["about", "tracks"]) {
+for (const name of ["how-it-works", "tracks"]) {
   try {
     page(join(ROOT, "web", name, "index.html"), join(OUT, name, "index.html"));
   } catch {
@@ -97,8 +99,9 @@ writeFileSync(
 const today = new Date().toISOString().slice(0, 10);
 const pages = [
   { loc: "/", priority: "1.0", changefreq: "weekly" },
-  { loc: "/about/", priority: "0.7", changefreq: "monthly" },
-  { loc: "/tracks/", priority: "0.7", changefreq: "monthly" },
+  { loc: "/generate/", priority: "0.9", changefreq: "weekly" },
+  { loc: "/how-it-works/", priority: "0.7", changefreq: "monthly" },
+  { loc: "/tracks/", priority: "0.6", changefreq: "monthly" },
 ];
 writeFileSync(
   join(OUT, "sitemap.xml"),

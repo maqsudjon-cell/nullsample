@@ -103,11 +103,11 @@ const elPlay = $<HTMLButtonElement>("play");
 const elSeed = $<HTMLInputElement>("seed");
 const elDice = $<HTMLButtonElement>("dice");
 const elCanvas = $<HTMLCanvasElement>("scope");
-const elMarks = $<HTMLDivElement>("marks");
+const elRuler = $<HTMLDivElement>("ruler");
 const elTime = $<HTMLSpanElement>("time");
 const elDuration = $<HTMLSpanElement>("duration");
 const elState = $<HTMLSpanElement>("statelabel");
-const elReadout = $<HTMLDListElement>("readout");
+const elStamp = $<HTMLParagraphElement>("stamp");
 const elLanes = $<HTMLDivElement>("lanes");
 const elWav = $<HTMLButtonElement>("wav");
 const elStems = $<HTMLButtonElement>("stems");
@@ -230,8 +230,8 @@ function startTrack(info: PlanInfo): void {
     complete: false,
     busPeaks: {},
   };
-  renderReadout(info);
-  renderMarks(info);
+  renderStamp(info);
+  renderRuler(info);
   renderLanes(info);
   elDuration.textContent = clock(info.totalSamples / info.sampleRate);
 }
@@ -620,49 +620,97 @@ function drawScope(playhead = -1): void {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
 
-  const mid = h / 2;
+  const mid = Math.round(h / 2);
   const css = getComputedStyle(document.documentElement);
   const line = css.getPropertyValue("--line").trim() || "#1e232b";
+  const dim = css.getPropertyValue("--dim").trim() || "#7a8391";
   const text = css.getPropertyValue("--text").trim() || "#e4e7eb";
   const flare = css.getPropertyValue("--flare").trim() || "#ff6a1a";
+  const pad = 12;
+  const height = mid - pad;
+  // a gutter on the left so the amplitude labels sit beside the trace, not on it
+  const gutter = 26;
+  const plotW = w - gutter;
 
-  // baseline
+  g.font = `11px ${css.getPropertyValue("--mono").trim() || "monospace"}`;
+  g.textBaseline = "middle";
+
+  // --- amplitude scale ---------------------------------------------------
+  // Real values, not a decorative texture: the grid is what makes the page an
+  // instrument rather than a picture of one.
+  const amps: [number, string][] = [
+    [1, "1.0"],
+    [0.5, "0.5"],
+    [0, "0"],
+    [-0.5, "0.5"],
+    [-1, "1.0"],
+  ];
   g.strokeStyle = line;
   g.lineWidth = 1;
-  g.beginPath();
-  g.moveTo(0, Math.round(mid) + 0.5);
-  g.lineTo(w, Math.round(mid) + 0.5);
-  g.stroke();
+  for (const [v, label] of amps) {
+    const y = Math.round(mid - v * height) + 0.5;
+    g.beginPath();
+    g.moveTo(gutter, y);
+    g.lineTo(w, y);
+    g.stroke();
+    g.fillStyle = v === 0 ? dim : line;
+    g.fillText(label, 2, y);
+  }
 
-  if (!track) return;
+  if (!track) {
+    // The empty state is the instrument at rest: the scale is already there,
+    // waiting for a signal. An invitation, not a placeholder.
+    g.fillStyle = dim;
+    g.fillText("press generate", gutter + plotW / 2 - 42, mid - 18);
+    return;
+  }
+
   const total = track.info.totalSamples;
+  const sr = track.info.sampleRate;
   const chunk = track.info.chunkSize;
   const buckets = Math.ceil(total / chunk) * PEAKS_PER_CHUNK;
   const filledBuckets = Math.ceil((track.filled / chunk) * PEAKS_PER_CHUNK);
 
-  // section boundaries
+  // --- time scale --------------------------------------------------------
+  const durationSec = total / sr;
+  const step = durationSec > 150 ? 30 : durationSec > 60 ? 15 : 10;
+  g.strokeStyle = line;
+  for (let t = step; t < durationSec; t += step) {
+    const x = Math.round(gutter + (t / durationSec) * plotW) + 0.5;
+    g.beginPath();
+    g.moveTo(x, mid - height);
+    g.lineTo(x, mid - height + 6);
+    g.moveTo(x, mid + height - 6);
+    g.lineTo(x, mid + height);
+    g.stroke();
+    g.fillStyle = line;
+    const label = `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}`;
+    g.fillText(label, x + 4, mid + height - 8);
+  }
+
+  // --- section boundaries ------------------------------------------------
   g.strokeStyle = line;
   for (const s of track.info.sections) {
-    const x = Math.round((s.startSample / total) * w) + 0.5;
+    const x = Math.round(gutter + (s.startSample / total) * plotW) + 0.5;
     g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, h);
+    g.moveTo(x, mid - height);
+    g.lineTo(x, mid + height);
     g.stroke();
   }
 
-  // The trace. Newly arrived bars are drawn in --flare and settle to --text,
-  // so the drawing-in IS the render rather than an animation played over it.
-  // Peak is drawn faintly and rms solid inside it: peak alone is a solid block
-  // on a limited master, and the shape of the arrangement disappears.
+  // --- the trace ---------------------------------------------------------
+  // Newly arrived bars are drawn in --flare and settle to --text, so the
+  // drawing-in IS the render rather than an animation played over it. Peak is
+  // faint with rms filled inside: peak alone is a solid block on a limited
+  // master and the arrangement disappears.
   const freshFrom = reducedMotion ? filledBuckets : Math.max(0, filledBuckets - PEAKS_PER_CHUNK * 2);
-  const bw = Math.max(1, w / buckets);
+  const bw = Math.max(1, plotW / buckets);
   const bodyW = bw > 1.2 ? bw - 0.4 : bw;
-  const height = mid - 6;
   for (let b = 0; b < filledBuckets && b < buckets; b++) {
-    const x = (b / buckets) * w;
+    const x = gutter + (b / buckets) * plotW;
     const fresh = b >= freshFrom;
     const peakAmp = Math.max(0.6, track.peaks[b * 2] * height);
-    g.globalAlpha = fresh ? 0.5 : 0.32;
+    g.globalAlpha = fresh ? 0.5 : 0.3;
     g.fillStyle = fresh ? flare : text;
     g.fillRect(x, mid - peakAmp, bodyW, peakAmp * 2);
     const rmsAmp = Math.max(0.6, track.peaks[b * 2 + 1] * height * 1.6);
@@ -671,51 +719,67 @@ function drawScope(playhead = -1): void {
   }
   g.globalAlpha = 1;
 
-  // playhead
+  // --- playhead ----------------------------------------------------------
   if (playhead >= 0 && total > 0) {
-    const x = Math.round((playhead / total) * w) + 0.5;
+    const x = Math.round(gutter + (playhead / total) * plotW) + 0.5;
     g.strokeStyle = flare;
-    g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, h);
+    g.moveTo(x, mid - height);
+    g.lineTo(x, mid + height);
     g.stroke();
   }
 }
 
-function renderMarks(info: PlanInfo): void {
+function renderRuler(info: PlanInfo): void {
   const total = info.totalSamples;
-  elMarks.innerHTML = "";
+  const barsPerSample = 1 / info.chunkSize;
+  const parts: string[] = ['<div class="playhead" id="playhead" style="left:0;display:none"></div>'];
   for (const s of info.sections) {
-    const span = document.createElement("span");
-    const width = ((s.endSample - s.startSample) / total) * 100;
-    span.style.flexBasis = `${width}%`;
-    span.textContent = s.name;
-    span.dataset.start = String(s.startSample);
-    span.dataset.end = String(s.endSample);
-    elMarks.appendChild(span);
+    const pct = (s.startSample / total) * 100;
+    const bar = Math.round(s.startSample * barsPerSample) + 1;
+    parts.push(`<div class="tick" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%"></div>`);
+    parts.push(
+      `<div class="lab" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%">` +
+        `${escapeHtml(s.name)}<b>${bar}</b></div>`,
+    );
   }
+  elRuler.innerHTML = parts.join("");
 }
 
 function highlightMark(pos: number): void {
-  for (const el of Array.from(elMarks.children) as HTMLElement[]) {
+  const total = track ? track.info.totalSamples : 0;
+  for (const el of Array.from(elRuler.children) as HTMLElement[]) {
+    if (el.classList.contains("playhead")) {
+      if (total > 0 && state !== "idle") {
+        el.style.display = "block";
+        el.style.left = `${(pos / total) * 100}%`;
+      }
+      continue;
+    }
     const from = Number(el.dataset.start);
     const to = Number(el.dataset.end);
     el.classList.toggle("live", pos >= from && pos < to);
   }
 }
 
-function renderReadout(info: PlanInfo): void {
-  const rows: [string, string][] = [
-    ["tempo", `${info.tempo.toFixed(1)} BPM`],
-    ["key", `${info.key} ${info.scale.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`],
-    ["form", info.arrangement],
-    ["bars", String(info.bars)],
-    ["rate", `${(info.sampleRate / 1000).toFixed(1)} kHz`],
+function renderStamp(info: PlanInfo): void {
+  const scale = info.scale
+    .replace(/([A-Z])/g, " $1")
+    .toLowerCase()
+    .trim()
+    .replace("natural minor", "min")
+    .replace("harmonic minor", "harm min")
+    .replace("minor pentatonic", "min pent")
+    .replace("phrygian dominant", "phryg dom")
+    .replace("aeolian sharp4", "aeolian #4");
+  const parts = [
+    `${info.tempo.toFixed(1)} BPM`,
+    `${info.key} ${scale.toUpperCase()}`,
+    `${info.bars} BARS`,
+    `${(info.sampleRate / 1000).toFixed(1)} kHz`,
+    info.arrangement,
   ];
-  elReadout.innerHTML = rows
-    .map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`)
-    .join("");
+  elStamp.textContent = parts.join("  \u00B7  ");
 }
 
 function renderLanes(info: PlanInfo): void {
@@ -729,7 +793,7 @@ function renderLanes(info: PlanInfo): void {
         const label = BUS_LABELS[bus] ?? bus;
         return `<div class="lane" data-bus="${bus}" data-locked="false">
           <button type="button" class="lock" data-bus="${bus}" aria-pressed="false"
-            aria-label="Lock the ${label} bus, so rerolling keeps it">LOCK</button>
+            aria-label="Lock the ${label} bus, so rerolling keeps it"></button>
           <span class="name">${label}</span>
           <canvas data-bus="${bus}" aria-hidden="true"></canvas>
           <span class="db" data-bus="${bus}">&mdash;</span>
