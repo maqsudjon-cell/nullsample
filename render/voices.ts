@@ -17,6 +17,7 @@ import { DistortionChain, softClip } from "../core/shape.ts";
 import { Chorus } from "../core/delay.ts";
 import { FormantVoice, NEUTRAL_FORMANTS } from "../core/formant.ts";
 import { renderClap, renderHat, renderKick, renderRim, renderSnare } from "../core/drums.ts";
+import type { Bass808Voice } from "../core/bass808.ts";
 import type { DrumEvent, DrumVoice, NoteEvent, ChordEvent, FxEvent, TrackPlan } from "./plan.ts";
 
 const BLOCK = 512;
@@ -312,23 +313,21 @@ export class DrumsBus {
 // ---------------------------------------------------------------------------
 
 /**
- * The 808 is pre-rendered to one mono buffer before chunking begins.
+ * The 808 bus: a streaming sub voice into the distortion chain.
  *
- * It is the only voice with state that runs continuously across the whole
- * track - portamento and glide mean note N's pitch depends on note N-1 - and
- * it is mono, so a full-length buffer costs half what a stereo bus would. The
- * distortion and gain stages still stream.
+ * Everything below 120 Hz stays mono, so this bus is written to both channels
+ * at identical level and is never widened.
  */
 export class Bass808Bus {
-  private source: Float32Array;
+  private voice: Bass808Voice;
   private dist: DistortionChain;
   private gain: number;
   private auto: Automation;
   private tmp = new Float64Array(2);
   private scratch: Float32Array;
 
-  constructor(plan: TrackPlan, chunkSize: number, source: Float32Array) {
-    this.source = source;
+  constructor(plan: TrackPlan, chunkSize: number, voice: Bass808Voice) {
+    this.voice = voice;
     this.auto = new Automation(plan);
     const p = plan.bass;
     this.dist = new DistortionChain(BLOCK, plan.sampleRate);
@@ -347,11 +346,7 @@ export class Bass808Bus {
   render(L: Float32Array, R: Float32Array, start: number, count: number): void {
     this.auto.beginChunk(start);
     const s = this.scratch;
-    const src = this.source;
-    for (let i = 0; i < count; i++) {
-      const j = start + i;
-      s[i] = j < src.length ? src[j] : 0;
-    }
+    this.voice.render(s, start, count);
     for (let i = 0; i < count; i += BLOCK) {
       this.dist.process(s, i, Math.min(BLOCK, count - i));
     }

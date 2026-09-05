@@ -4,28 +4,28 @@
   "sampleRate": 44100,
   "tracks": {
     "7": {
-      "sha256": "b08ea5af4fe552ce387ce0c19e312109f72bf6e8d58dc721f2920086c92287bd",
-      "bytes": 20429108,
+      "sha256": "3c2c25490680e33f68b8803f0af28258496ec995752a1ace2a301af3cf02335f",
+      "bytes": 20431156,
       "bars": 72,
       "tempo": 152.5,
-      "peakDb": -0.901,
-      "rmsDb": -10.0443
+      "peakDb": -1.1208,
+      "rmsDb": -8.9263
     },
     "12345": {
-      "sha256": "9befddcf9b0ea0eaceb33a16b5b1956a219c167c74131957f3475f357bf90c33",
-      "bytes": 21891284,
+      "sha256": "fe0e58336a8eff9ec62dc6dc8b1d996de892ecb48625faf26326d03508dfbcec",
+      "bytes": 21893332,
       "bars": 76,
       "tempo": 150,
-      "peakDb": -0.8691,
-      "rmsDb": -8.5861
+      "peakDb": -1.0953,
+      "rmsDb": -6.5259
     },
     "hello": {
-      "sha256": "8c039bf470d58164951b94f5e8be696008825ae175757e46c299e0d273e63c5c",
-      "bytes": 20694932,
+      "sha256": "5265b96f44efc1f6474e57052463513190e8f1865a9a8c4739c6632e260e1c26",
+      "bytes": 20696980,
       "bars": 72,
       "tempo": 150.5,
-      "peakDb": -0.8377,
-      "rmsDb": -10.0948
+      "peakDb": -1.0702,
+      "rmsDb": -9.0359
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "preset": "hyperpop",
   "version": 1,
-  "note": "Untuned v1 ranges. These are starting brackets, deliberately wide. Narrow them with `npm run narrow` against real ratings; do not hand-guess them. master.driveRmsDb is the loudness control and the first thing worth tuning by ear: the mix is trimmed to that RMS before the master chain, so it decides how hard the clipper works and therefore whether the transients still punch. bass.bias is deliberately near zero: asymmetric shaping on a 40 Hz sub produces DC that a blocker cannot remove without eating the fundamental, so even harmonics on the 808 come from drive and fold instead.",
+  "note": "Untuned v1 ranges. These are starting brackets, deliberately wide. Narrow them with `npm run narrow` against real ratings; do not hand-guess them. master.makeupDb is the loudness control and the first thing worth tuning by ear: it is a fixed gain into the saturator and clipper, so it decides how hard they work and therefore whether the transients still punch. It is fixed rather than derived from the finished mix because the master chain has to stream - what you hear during playback and what lands in the downloaded file are produced by the same code in the same order. bass.bias is deliberately near zero: asymmetric shaping on a 40 Hz sub produces DC that a blocker cannot remove without eating the fundamental, so even harmonics on the 808 come from drive and fold instead.",
   "license": "See presets/LICENSE-PRESETS.md. Tuned range files are the commercial asset and are licensed separately from the engine.",
   "params": {
     "tempo": {
@@ -507,13 +507,13 @@
       "min": -12.0,
       "max": -3.0
     },
-    "master.driveRmsDb": {
-      "min": -5.0,
-      "max": -2.0
+    "master.makeupDb": {
+      "min": 11.0,
+      "max": 14.0
     },
-    "master.glueThresholdRelDb": {
-      "min": -1.0,
-      "max": 7.0
+    "master.glueThresholdDb": {
+      "min": -20.0,
+      "max": -13.0
     },
     "master.glueRatio": {
       "min": 1.8,
@@ -545,8 +545,8 @@
       "max": 0.99
     },
     "master.targetPeakDb": {
-      "min": -1.0,
-      "max": -0.5
+      "min": -1.2,
+      "max": -0.8
     },
     "master.widthMid": {
       "min": 0.0,

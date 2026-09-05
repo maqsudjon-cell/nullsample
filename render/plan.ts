@@ -114,10 +114,9 @@ export interface FxParams {
 }
 
 export interface MasterParams {
-  /** the mix is trimmed to this RMS before the chain; the loudness control */
-  driveRmsDb: number;
-  /** glue threshold relative to the mix RMS, in dB */
-  glueThresholdRelDb: number; glueRatio: number; glueAttack: number; glueRelease: number;
+  /** fixed makeup gain into the saturator; the loudness control */
+  makeupDb: number;
+  glueThresholdDb: number; glueRatio: number; glueAttack: number; glueRelease: number;
   satDrive: number; shelfHz: number; shelfDb: number;
   clipCeiling: number; targetPeakDb: number; widthMid: number;
 }
@@ -399,8 +398,8 @@ export function buildPlan(opts: PlanOptions): TrackPlan {
   };
 
   const master: MasterParams = {
-    driveRmsDb: sampler.num("master.driveRmsDb"),
-    glueThresholdRelDb: sampler.num("master.glueThresholdRelDb"),
+    makeupDb: sampler.num("master.makeupDb"),
+    glueThresholdDb: sampler.num("master.glueThresholdDb"),
     glueRatio: sampler.num("master.glueRatio"),
     glueAttack: sampler.num("master.glueAttack"),
     glueRelease: sampler.num("master.glueRelease"),

@@ -9,6 +9,7 @@
  */
 
 import { db2gain, dexp, dpow, gain2db, timeCoef } from "./dmath.ts";
+import { kaiserLowpass } from "./shape.ts";
 
 export class EnvelopeFollower {
   private y = 0;
@@ -193,6 +194,145 @@ export class Limiter {
 
     out[0] = outL * this.gain;
     out[1] = outR * this.gain;
+  }
+}
+
+/**
+ * True-peak limiter.
+ *
+ * The final stage of a streaming master. Two things distinguish it from the
+ * plain Limiter above:
+ *
+ * 1. It measures the INTER-SAMPLE peak. A signal whose samples all sit under
+ *    0 dBFS can still reconstruct above it between samples, and a lossy
+ *    encoder will clip it. Detection therefore runs on a 4x interpolated copy
+ *    of each channel, which is what "true peak" means.
+ *
+ * 2. It sets the output ceiling on its own, with no look back over the whole
+ *    track. That is what lets the master chain stream: the file the user
+ *    downloads is produced by exactly the same code path, in the same order,
+ *    as the audio they already heard.
+ *
+ * One gain is applied to both channels so the stereo image cannot shift.
+ */
+export class TruePeakLimiter {
+  private look: number;
+  private win: number;
+  private delayL: Float32Array;
+  private delayR: Float32Array;
+  private peaks: Float32Array;
+  private deque: Int32Array;
+  private head = 0;
+  private tail = 0;
+  private idx = 0;
+  private gain = 1;
+  private kr: number;
+  // 4x interpolation, detection only: 4 phases of 8 taps
+  private up: Float64Array;
+  private histL: Float64Array;
+  private histR: Float64Array;
+  private hpos = 0;
+
+  ceiling = 0.891; // -1 dBTP
+
+  constructor(sampleRate: number, lookaheadSec = 0.003, releaseSec = 0.08) {
+    this.look = Math.max(8, Math.floor(lookaheadSec * sampleRate));
+    this.win = this.look + 1;
+    this.delayL = new Float32Array(this.win);
+    this.delayR = new Float32Array(this.win);
+    this.peaks = new Float32Array(this.win);
+    this.deque = new Int32Array(this.win + 1);
+    this.kr = timeCoef(releaseSec, sampleRate);
+    // Measured against sines whose samples deliberately miss the peak: 16
+    // taps underestimates by 1.8 dB at half Nyquist, which would make this a
+    // true-peak limiter in name only. 32 taps lands within 0.25 dB, and the
+    // ceiling carries that as margin.
+    const proto = kaiserLowpass(32, 0.125, 6);
+    this.up = new Float64Array(32);
+    for (let ph = 0; ph < 4; ph++) {
+      for (let k = 0; k < 8; k++) this.up[ph * 8 + k] = proto[k * 4 + ph] * 4;
+    }
+    this.histL = new Float64Array(16);
+    this.histR = new Float64Array(16);
+  }
+
+  reset(): void {
+    this.delayL.fill(0);
+    this.delayR.fill(0);
+    this.peaks.fill(0);
+    this.histL.fill(0);
+    this.histR.fill(0);
+    this.head = 0;
+    this.tail = 0;
+    this.idx = 0;
+    this.hpos = 0;
+    this.gain = 1;
+  }
+
+  /** Highest interpolated magnitude across both channels for this frame. */
+  private truePeak(l: number, r: number): number {
+    const { up, histL, histR } = this;
+    const pos = this.hpos;
+    histL[pos] = l;
+    histL[pos + 8] = l;
+    histR[pos] = r;
+    histR[pos + 8] = r;
+    let mx = l < 0 ? -l : l;
+    const ar = r < 0 ? -r : r;
+    if (ar > mx) mx = ar;
+    for (let ph = 0; ph < 4; ph++) {
+      const b = ph * 8;
+      let sl = 0;
+      let sr = 0;
+      for (let k = 0; k < 8; k++) {
+        sl += up[b + k] * histL[pos + k];
+        sr += up[b + k] * histR[pos + k];
+      }
+      const al = sl < 0 ? -sl : sl;
+      const arr = sr < 0 ? -sr : sr;
+      if (al > mx) mx = al;
+      if (arr > mx) mx = arr;
+    }
+    this.hpos = pos === 0 ? 7 : pos - 1;
+    return mx;
+  }
+
+  process(l: number, r: number, out: Float64Array): void {
+    const w = this.win;
+    const dq = this.deque;
+    const cap = dq.length;
+    const p = this.truePeak(l, r);
+    const i = this.idx;
+    const slot = i % w;
+
+    this.peaks[slot] = p;
+    while (this.tail !== this.head) {
+      const back = (this.tail - 1 + cap) % cap;
+      if (this.peaks[dq[back] % w] <= p) this.tail = back;
+      else break;
+    }
+    dq[this.tail] = i;
+    this.tail = (this.tail + 1) % cap;
+    while (dq[this.head] <= i - w) this.head = (this.head + 1) % cap;
+    const windowMax = this.peaks[dq[this.head] % w];
+
+    const outSlot = (i + 1) % w;
+    const outL = this.delayL[outSlot];
+    const outR = this.delayR[outSlot];
+    this.delayL[slot] = l;
+    this.delayR[slot] = r;
+    this.idx = i + 1;
+
+    const need = windowMax > this.ceiling ? this.ceiling / windowMax : 1;
+    this.gain = need < this.gain ? need : need + this.kr * (this.gain - need);
+
+    out[0] = outL * this.gain;
+    out[1] = outR * this.gain;
+  }
+
+  /** Latency in samples. */
+  get latency(): number {
+    return this.look;
   }
 }
 

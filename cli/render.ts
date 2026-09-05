@@ -41,7 +41,7 @@ console.log(`${out}`);
 console.log(`  seed ${p.seed}  preset ${p.presetName}`);
 console.log(`  ${p.tempo.toFixed(1)} BPM  ${noteName} ${p.harmony.scaleName}  ${p.arrangement.templateName}  ${p.bars} bars  ${result.stats.durationSeconds.toFixed(1)} s`);
 console.log(`  sections: ${p.arrangement.sections.map((s) => `${s.name}(${s.bars})`).join(" ")}`);
-console.log(`  peak ${result.stats.peakDb.toFixed(2)} dBFS  rms ${result.stats.rmsDb.toFixed(2)} dBFS  normalise ${result.stats.normaliseGainDb >= 0 ? "+" : ""}${result.stats.normaliseGainDb.toFixed(2)} dB`);
+console.log(`  peak ${result.stats.peakDb.toFixed(2)} dBFS  rms ${result.stats.rmsDb.toFixed(2)} dBFS  crest ${(result.stats.peakDb - result.stats.rmsDb).toFixed(1)} dB`);
 const peaks = Object.entries(result.stats.busPeaks)
   .map(([k, v]) => `${k} ${(20 * Math.log10(v + 1e-12)).toFixed(1)}`)
   .join("  ");

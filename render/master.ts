@@ -15,7 +15,7 @@
 import { clamp, db2gain } from "../core/dmath.ts";
 import { Biquad, DcBlocker, Svf } from "../core/filter.ts";
 import { DelayLine } from "../core/delay.ts";
-import { Compressor, Limiter } from "../core/dynamics.ts";
+import { Compressor, TruePeakLimiter } from "../core/dynamics.ts";
 import { AdaaClipper, Oversampler4x, softClip } from "../core/shape.ts";
 import type { MasterParams } from "./plan.ts";
 
@@ -38,7 +38,10 @@ export class MasterChain {
   private shelfR = new Biquad();
   private dcL: DcBlocker;
   private dcR: DcBlocker;
-  private limiter: Limiter;
+  private limiter: TruePeakLimiter;
+  private fadeInSamples: number;
+  private fadeOutSamples: number;
+  private totalSamples = 0;
   private frame = new Float64Array(2);
   private satComp: number;
   private inputGain: number;
@@ -56,7 +59,7 @@ export class MasterChain {
     this.compL = new Compressor(sampleRate, p.glueAttack, p.glueRelease);
     this.compR = new Compressor(sampleRate, p.glueAttack, p.glueRelease);
     for (const c of [this.compL, this.compR]) {
-      c.thresholdDb = -18; // replaced by setGlueThresholdDb once the mix is measured
+      c.thresholdDb = p.glueThresholdDb;
       c.ratio = p.glueRatio;
       c.kneeDb = 6;
       c.makeupDb = 0;
@@ -80,24 +83,34 @@ export class MasterChain {
     // applies to the signal rather than to the signal plus an offset.
     this.dcL = new DcBlocker(sampleRate, 12);
     this.dcR = new DcBlocker(sampleRate, 12);
-    this.limiter = new Limiter(sampleRate, 0.0025, 0.06);
-    this.limiter.ceiling = db2gain(-0.6);
-    // Set by the renderer once the mix level is known. See setInputGain.
-    this.inputGain = 1;
+    this.limiter = new TruePeakLimiter(sampleRate, 0.003, 0.08);
+    this.limiter.ceiling = db2gain(p.targetPeakDb);
+    // A fixed gain, from the preset. Not derived from the finished mix: see
+    // the note on process().
+    this.inputGain = db2gain(p.makeupDb);
+    this.fadeInSamples = Math.round(0.006 * sampleRate);
+    this.fadeOutSamples = Math.round(0.35 * sampleRate);
   }
 
   /**
-   * Processes a chunk in place.
+   * Processes a chunk in place. Fully streaming: nothing here looks at any
+   * sample outside the current chunk plus its own filter state.
    *
-   * Order, and why the trim sits where it does: the glue compressor works on
-   * the mix at its natural level, because a compressor with an absolute
-   * threshold that is fed an already-boosted signal stops being glue and
-   * becomes a brick wall - one seed measured 15 dB of gain reduction and came
-   * out six decibels quieter than every other. The loudness trim therefore
-   * goes after the compressor and before the saturation, which is where a
+   * That constraint is the whole point. An earlier version measured the
+   * finished mix and normalised to a target peak, which sounded fine but made
+   * it structurally impossible for progressive playback and the downloaded
+   * file to be the same audio - the file would have been rescaled by a factor
+   * only knowable at the end. So the loudness control is a fixed makeup gain
+   * from the preset, and the ceiling is set by a true-peak limiter that
+   * decides locally.
+   *
+   * Order: the glue compressor works on the mix at its natural level, because
+   * a compressor with an absolute threshold fed an already-boosted signal
+   * stops being glue and becomes a brick wall. The makeup gain therefore goes
+   * after the compressor and before the saturation, which is where a
    * mastering engineer would put it.
    */
-  process(L: Float32Array, R: Float32Array, count: number): void {
+  process(L: Float32Array, R: Float32Array, count: number, absoluteStart = 0): void {
     const p = this.p;
     const frame = this.frame;
 
@@ -136,9 +149,23 @@ export class MasterChain {
       this.nonlinear(R, i, n, this.osR, this.clipR, this.shelfR);
     }
 
-    // --- DC removal then limiter ------------------------------------------
+    // --- DC removal, fades, then the true-peak limiter --------------------
+    const total = this.totalSamples;
+    const fin = this.fadeInSamples;
+    const fout = this.fadeOutSamples;
     for (let i = 0; i < count; i++) {
-      this.limiter.process(this.dcL.process(L[i]), this.dcR.process(R[i]), frame);
+      const abs = absoluteStart + i;
+      let fade = 1;
+      if (abs < fin) fade = abs / fin;
+      else if (total > 0 && abs >= total - fout) {
+        const left = total - 1 - abs;
+        fade = left <= 0 ? 0 : left / fout;
+      }
+      this.limiter.process(
+        this.dcL.process(L[i]) * fade,
+        this.dcR.process(R[i]) * fade,
+        frame,
+      );
       L[i] = frame[0];
       R[i] = frame[1];
     }
@@ -177,18 +204,9 @@ export class MasterChain {
    * and passes the trim that puts it at the preset's target RMS, so the chain
    * does the same amount of work on every seed.
    */
-  setInputGain(gain: number): void {
-    this.inputGain = gain;
-  }
-
-  /**
-   * The glue threshold is relative to the mix's own RMS, so the compressor
-   * does the same amount of work whatever level the arrangement happened to
-   * arrive at.
-   */
-  setGlueThresholdDb(db: number): void {
-    this.compL.thresholdDb = db;
-    this.compR.thresholdDb = db;
+  /** Total length, needed so the fade-out can be placed without look-ahead. */
+  setTotalSamples(n: number): void {
+    this.totalSamples = n;
   }
 
   /** Latency introduced by the limiter's lookahead, in samples. */
@@ -198,50 +216,10 @@ export class MasterChain {
 }
 
 /**
- * Scales the finished track to the target peak and applies short fades.
- * Done as a separate pass because the true peak is only known once the whole
- * track exists.
+ * The limiter introduces a fixed latency, so the last few milliseconds of the
+ * track are still inside it when the input runs out. The renderer flushes
+ * them by pushing silence.
  */
-export function normaliseAndFade(
-  L: Float32Array,
-  R: Float32Array,
-  sampleRate: number,
-  targetPeakDb: number,
-  fadeInSeconds = 0.006,
-  fadeOutSeconds = 0.35,
-): { gain: number; peakBefore: number } {
-  // Fades first, then measure, then scale. The other order lets a peak that
-  // happens to sit inside the fade-out get attenuated after it was measured,
-  // so the finished track lands short of its target by however much the fade
-  // took off.
-  const fin = Math.min(L.length, Math.round(fadeInSeconds * sampleRate));
-  for (let i = 0; i < fin; i++) {
-    const g = i / fin;
-    L[i] *= g;
-    R[i] *= g;
-  }
-  const fout = Math.min(L.length, Math.round(fadeOutSeconds * sampleRate));
-  for (let i = 0; i < fout; i++) {
-    const g = i / fout;
-    const j = L.length - 1 - i;
-    L[j] *= g;
-    R[j] *= g;
-  }
-
-  let peak = 0;
-  for (let i = 0; i < L.length; i++) {
-    const a = L[i] < 0 ? -L[i] : L[i];
-    const b = R[i] < 0 ? -R[i] : R[i];
-    if (a > peak) peak = a;
-    if (b > peak) peak = b;
-  }
-  const target = db2gain(targetPeakDb);
-  const gain = peak > 1e-9 ? target / peak : 1;
-  for (let i = 0; i < L.length; i++) {
-    L[i] *= gain;
-    R[i] *= gain;
-  }
-  return { gain, peakBefore: peak };
-}
+export const MASTER_FLUSH_SAMPLES = 512;
 
 export { clamp };

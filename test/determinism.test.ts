@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { getPreset } from "../presets/index.ts";
-import { renderTrack, renderStem } from "../render/track.ts";
+import { renderTrack, renderStem, TrackRenderer } from "../render/track.ts";
 import { buildPlan } from "../render/plan.ts";
 import { encodeWav } from "../render/wav.ts";
 
@@ -134,6 +134,42 @@ test("word sliders change the render without changing the structure", () => {
     seed: "words", preset, ranges, sampleRate: FAST, words: { darker: 1 },
   });
   assert.equal(sha(encodeWav(dark.audio, 16)), sha(encodeWav(dark2.audio, 16)));
+});
+
+test("streaming: the first chunk does not depend on the rest of the track", () => {
+  // This is what makes progressive playback honest. If any stage looked ahead
+  // - a normalisation pass over the finished mix, say - then the audio a
+  // listener heard first would have to be rescaled once the render completed,
+  // and the file would not be the audio they heard.
+  const opts = { seed: "stream", preset, ranges, sampleRate: FAST };
+
+  const partial = new TrackRenderer(opts);
+  const pl = new Float32Array(partial.chunkSize);
+  const pr = new Float32Array(partial.chunkSize);
+  const firstChunks: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const n = partial.next(pl, pr);
+    for (let k = 0; k < n; k++) {
+      firstChunks.push(pl[k], pr[k]);
+    }
+  }
+
+  const full = renderTrack(opts);
+  for (let i = 0; i < firstChunks.length / 2; i++) {
+    assert.equal(full.audio.L[i], firstChunks[i * 2], `left sample ${i} changed once the rest was rendered`);
+    assert.equal(full.audio.R[i], firstChunks[i * 2 + 1], `right sample ${i} changed once the rest was rendered`);
+  }
+});
+
+test("streaming: the renderer reaches exactly its stated length", () => {
+  const r = new TrackRenderer({ seed: "len", preset, ranges, sampleRate: FAST });
+  const L = new Float32Array(r.chunkSize);
+  const R = new Float32Array(r.chunkSize);
+  let total = 0;
+  let guard = 0;
+  while (!r.done && guard++ < 10000) total += r.next(L, R);
+  assert.equal(total, r.totalSamples);
+  assert.equal(r.next(L, R), 0, "a finished renderer must return 0");
 });
 
 test("golden: reference renders still hash to their committed values", { timeout: 300000 }, () => {
