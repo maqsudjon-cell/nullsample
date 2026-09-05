@@ -7,7 +7,7 @@
  * enough to lose mantissa bits.
  */
 
-import { sinTurns } from "./dmath.ts";
+import { dsqrt, sinTurns } from "./dmath.ts";
 import type { Rng } from "./rng.ts";
 
 /** Step correction for a unit jump discontinuity. */
@@ -196,7 +196,8 @@ export class Supersaw {
   private panL: Float64Array;
   private panR: Float64Array;
   private ratio: Float64Array;
-  private norm: number;
+  private normL: number;
+  private normR: number;
 
   readonly count: number;
 
@@ -233,7 +234,22 @@ export class Supersaw {
       this.panL[c] = 0.5;
       this.panR[c] = 0.5;
     }
-    this.norm = 1 / (0.6 + 0.4 * n);
+    // Voice-count compensation.
+    //
+    // The voices are detuned, so they are mutually incoherent and their
+    // energies add rather than their amplitudes: the sum grows as the square
+    // root of the count, not linearly. Normalising by the root-sum-square of
+    // the actual pan gains makes a nine-voice stack arrive at the same level
+    // as a seven-voice one, which an ad-hoc divisor did not. Per channel,
+    // because the pan spread is not symmetric for even voice counts.
+    let sumL2 = 0;
+    let sumR2 = 0;
+    for (let i = 0; i < n; i++) {
+      sumL2 += this.panL[i] * this.panL[i];
+      sumR2 += this.panR[i] * this.panR[i];
+    }
+    this.normL = 1 / dsqrt(sumL2 > 1e-9 ? sumL2 : 1e-9);
+    this.normR = 1 / dsqrt(sumR2 > 1e-9 ? sumR2 : 1e-9);
   }
 
   /** Precomputed cents-to-ratio table filled by the caller each note. */
@@ -252,7 +268,7 @@ export class Supersaw {
       l += v * this.panL[i];
       r += v * this.panR[i];
     }
-    out[0] = l * this.norm * 2;
-    out[1] = r * this.norm * 2;
+    out[0] = l * this.normL;
+    out[1] = r * this.normR;
   }
 }

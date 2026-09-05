@@ -8,7 +8,7 @@
  * scratch.
  */
 
-import { cents, clamp, db2gain, midiToHz, panGains } from "../core/dmath.ts";
+import { cents, clamp, db2gain, dsqrt, midiToHz, panGains } from "../core/dmath.ts";
 import { makeRng, type Rng } from "../core/rng.ts";
 import { Adsr, ExpDecay } from "../core/env.ts";
 import { DcBlocker, Svf } from "../core/filter.ts";
@@ -603,6 +603,8 @@ export class PadsBus {
   private autoTmp = new Float64Array(2);
   private silenced = false;
   private coefCounter = 0;
+  /** 1/sqrt(active voices): the pad voices are detuned and so incoherent */
+  private voiceNorm = 1;
 
   constructor(plan: TrackPlan, _chunkSize: number) {
     this.plan = plan;
@@ -655,6 +657,10 @@ export class PadsBus {
             voice.env.release();
           }
         }
+        // Voice-count compensation, same reasoning as the supersaw: a
+        // four-note chord must not be louder than a two-note one.
+        const sounding = Math.min(this.voices.length, Math.max(1, c.notes.length));
+        this.voiceNorm = 1 / dsqrt(sounding);
         this.currentEnd = c.start + c.length;
         this.cursor++;
       }
@@ -684,7 +690,8 @@ export class PadsBus {
           v.active = false;
           continue;
         }
-        let s = (v.a.next() + v.b.next()) * 0.5;
+        // two detuned saws are incoherent too, so root-two rather than a half
+        let s = (v.a.next() + v.b.next()) * 0.7071067811865476;
         if (useFormant) s = s * (1 - p.formantMix) + v.formant.next() * p.formantMix * 0.6;
         const y = s * e;
         l += y * v.panL;
@@ -697,7 +704,7 @@ export class PadsBus {
         this.filtR.set(cutoff, p.filterQ);
         this.coefCounter = COEF_INTERVAL;
       }
-      const g = this.gain * auto[1] * 0.4;
+      const g = this.gain * auto[1] * this.voiceNorm * 0.5;
       L[i] += this.filtL.lowpass(l) * g;
       R[i] += this.filtR.lowpass(r) * g;
     }

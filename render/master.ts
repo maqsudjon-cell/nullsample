@@ -85,9 +85,9 @@ export class MasterChain {
     this.dcR = new DcBlocker(sampleRate, 12);
     this.limiter = new TruePeakLimiter(sampleRate, 0.003, 0.08);
     this.limiter.ceiling = db2gain(p.targetPeakDb);
-    // A fixed gain, from the preset. Not derived from the finished mix: see
-    // the note on process().
-    this.inputGain = db2gain(p.makeupDb);
+    // The loudness gain is applied by the renderer to the pre-master sum, so
+    // every stage in here sees a known operating point. Nothing to scale.
+    this.inputGain = 1;
     this.fadeInSamples = Math.round(0.006 * sampleRate);
     this.fadeOutSamples = Math.round(0.35 * sampleRate);
   }

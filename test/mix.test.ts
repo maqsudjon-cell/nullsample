@@ -10,7 +10,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { getPreset } from "../presets/index.ts";
-import { renderStem, renderTrack } from "../render/track.ts";
+import { renderStem, renderTrack, TrackRenderer } from "../render/track.ts";
+import { gain2db } from "../core/dmath.ts";
 import { dcOffset, longestSilence, peak } from "../core/buffer.ts";
 import { analyseLoudness, CREST_FLOOR_DB } from "../render/loudness.ts";
 
@@ -39,6 +40,39 @@ test("the master hits its peak target", () => {
     );
     assert.ok(peak(r.audio) <= 1, `seed ${seed}: output exceeds full scale`);
   }
+});
+
+test("crest factor stays above the over-compression gate", { timeout: 300000 }, () => {
+  // F5's hard gate. Under 6 dB the master is over-compressed whatever the
+  // loudness reads, and no amount of tuning by ear can recover transients that
+  // the limiter already removed.
+  const seeds = ["NULL-0001", "m1", "m2", "m3", "m4", "m5", "VOID-7X2A", "RAGE-88KK"];
+  const failures: string[] = [];
+  const crests: number[] = [];
+  for (const seed of seeds) {
+    const r = renderTrack({ seed, preset, ranges, sampleRate: FAST });
+    const loud = analyseLoudness(r.audio, r.plan.sections);
+    crests.push(loud.crestDb);
+    if (loud.overCompressed) failures.push(`${seed} ${loud.crestDb.toFixed(1)} dB`);
+  }
+  assert.ok(
+    failures.length <= 1,
+    `${failures.length} of ${seeds.length} seeds over-compressed: ${failures.join(", ")}`,
+  );
+});
+
+test("the auto-gain drives every seed to the same pre-master level", { timeout: 300000 }, () => {
+  // The point of the measurement: the level going INTO the chain must not
+  // depend on which arrangement the seed happened to pick. What comes out
+  // still varies, because a track with more dynamics keeps less RMS once its
+  // peak is pinned to the ceiling - that is arithmetic, not a defect.
+  const driven: number[] = [];
+  for (const seed of ["NULL-0001", "m1", "m3", "m5", "RAGE-88KK"]) {
+    const r = new TrackRenderer({ seed, preset, ranges, sampleRate: FAST });
+    driven.push(r.measuredDriveDb + gain2db(r.autoGain));
+  }
+  const spread = Math.max(...driven) - Math.min(...driven);
+  assert.ok(spread < 1.5, `pre-master drive spread is ${spread.toFixed(2)} dB, expected under 1.5`);
 });
 
 test("loudness is measured over the drops, not the whole file", () => {

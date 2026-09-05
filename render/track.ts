@@ -17,7 +17,7 @@
  */
 
 import { createStereo, peakDb, rmsDb, type Stereo } from "../core/buffer.ts";
-import { db2gain } from "../core/dmath.ts";
+import { clamp as clampNumber, db2gain, dsqrt, gain2db } from "../core/dmath.ts";
 import { Bass808Voice } from "../core/bass808.ts";
 import { Reverb } from "../core/reverb.ts";
 import { StereoDelay } from "../core/delay.ts";
@@ -95,6 +95,9 @@ export class TrackRenderer {
 
   private cursor = 0;
   private nextSection = 0;
+  /** gain applied to the pre-master sum, from the drive measurement */
+  readonly autoGain: number;
+  readonly measuredDriveDb: number;
 
   constructor(opts: RenderOptions) {
     const sampleRate = opts.sampleRate ?? 44100;
@@ -113,61 +116,15 @@ export class TrackRenderer {
     this.chunkSize = plan.samplesPerBar;
     const chunk = this.chunkSize;
 
-    const only = opts.onlyBus;
-    const wanted = (b: BusName) => !only || only === b;
-
-    if (wanted("drums")) {
-      const bus = new DrumsBus(plan, chunk);
-      this.wiring.push({ name: "drums", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: 0, delaySend: 0, duckAmount: 0 });
-    }
-    if (wanted("bass808")) {
-      const voice = new Bass808Voice(sampleRate, plan.bassNotes, {
-        dropSemitones: plan.bass.dropSemitones,
-        dropTime: plan.bass.dropTime,
-        decay: plan.bass.decay,
-        attack: plan.bass.attack,
-        drive: plan.bass.drive,
-        subLevel: plan.bass.subLevel,
-        portamento: plan.bass.portamento,
-        toneHz: plan.bass.toneHz,
-      });
-      const bus = new Bass808Bus(plan, chunk, voice);
-      this.wiring.push({ name: "bass808", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: 0, delaySend: 0, duckAmount: 0 });
-    }
-    if (wanted("lead")) {
-      const bus = new LeadBus(plan, chunk);
-      this.wiring.push({ name: "lead", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.lead.reverbSend, delaySend: plan.lead.delaySend, duckAmount: plan.lead.duckAmount });
-    }
-    if (wanted("arp")) {
-      const bus = new ArpBus(plan, chunk);
-      this.wiring.push({ name: "arp", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.arp.reverbSend, delaySend: plan.arp.delaySend, duckAmount: plan.arp.duckAmount });
-    }
-    if (wanted("pads")) {
-      const bus = new PadsBus(plan, chunk);
-      this.wiring.push({ name: "pads", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.pads.reverbSend, delaySend: 0, duckAmount: plan.pads.duckAmount });
-    }
-    if (wanted("fx")) {
-      const bus = new FxBus(plan, chunk);
-      this.wiring.push({ name: "fx", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.fx.reverbSend, delaySend: 0, duckAmount: 0 });
-    }
+    this.wiring = buildBuses(plan, sampleRate, chunk, opts.onlyBus);
     for (const w of this.wiring) this.busPeaks[w.name] = 0;
 
-    this.reverb = new Reverb(sampleRate, 0);
-    this.reverb.decay = plan.sends.reverb.decay;
-    this.reverb.brightness = plan.sends.reverb.brightness;
-    this.reverb.size = plan.sends.reverb.size;
-    this.reverb.preDelaySeconds = plan.sends.reverb.preDelay;
-    this.reverb.update();
-    this.reverbReturn = db2gain(plan.sends.reverb.returnDb);
+    const sends = buildSends(plan, sampleRate);
+    this.reverb = sends.reverb;
+    this.reverbReturn = sends.reverbReturn;
     this.reverbDuck = plan.sends.reverb.duckAmount;
-
-    this.delay = new StereoDelay(sampleRate, 2);
-    this.delay.timeL = plan.sends.delay.timeL;
-    this.delay.timeR = plan.sends.delay.timeR;
-    this.delay.feedback = plan.sends.delay.feedback;
-    this.delay.damping = plan.sends.delay.damping;
-    this.delay.pingPong = true;
-    this.delayReturn = db2gain(plan.sends.delay.returnDb);
+    this.delay = sends.delay;
+    this.delayReturn = sends.delayReturn;
 
     this.master = new MasterChain(sampleRate, plan.master);
     this.master.setTotalSamples(this.totalSamples);
@@ -180,6 +137,16 @@ export class TrackRenderer {
     this.revSend = new Float32Array(chunk);
     this.dlySend = new Float32Array(chunk);
     this.duckBuf = new Float32Array(chunk);
+
+    const measured = opts.onlyBus ? plan.master.driveTargetDb : measureDrive(plan, sampleRate);
+    this.measuredDriveDb = measured;
+    // Every seed gets the gain IT needs, not the same gain. A fixed makeup
+    // cannot serve every arrangement: the pre-master level varies by about
+    // five decibels across seeds, so one value leaves some tracks limp and
+    // crushes others. This is what a mastering engineer does - you gain into
+    // the limiter by the amount that track needs.
+    const wanted = plan.master.driveTargetDb - measured;
+    this.autoGain = db2gain(clampNumber(wanted, -18, 30));
   }
 
   get position(): number {
@@ -254,10 +221,175 @@ export class TrackRenderer {
       R[i] += frame[1] * this.delayReturn;
     }
 
+    // the pre-master sum, driven to the level the chain expects
+    const ag = this.autoGain;
+    if (ag !== 1) {
+      for (let i = 0; i < count; i++) {
+        L[i] *= ag;
+        R[i] *= ag;
+      }
+    }
+
     this.master.process(L, R, count, start);
     this.cursor = start + count;
     return count;
   }
+}
+
+interface Sends {
+  reverb: Reverb;
+  reverbReturn: number;
+  delay: StereoDelay;
+  delayReturn: number;
+}
+
+/** Builds the bus set. Shared by the real render and the drive probe. */
+function buildBuses(
+  plan: TrackPlan,
+  sampleRate: number,
+  chunk: number,
+  only: BusName | undefined,
+): BusWiring[] {
+  const wanted = (b: BusName) => !only || only === b;
+  const out: BusWiring[] = [];
+  if (wanted("drums")) {
+    const bus = new DrumsBus(plan, chunk);
+    out.push({ name: "drums", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: 0, delaySend: 0, duckAmount: 0 });
+  }
+  if (wanted("bass808")) {
+    const voice = new Bass808Voice(sampleRate, plan.bassNotes, {
+      dropSemitones: plan.bass.dropSemitones,
+      dropTime: plan.bass.dropTime,
+      decay: plan.bass.decay,
+      attack: plan.bass.attack,
+      drive: plan.bass.drive,
+      subLevel: plan.bass.subLevel,
+      portamento: plan.bass.portamento,
+      toneHz: plan.bass.toneHz,
+    });
+    const bus = new Bass808Bus(plan, chunk, voice);
+    out.push({ name: "bass808", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: 0, delaySend: 0, duckAmount: 0 });
+  }
+  if (wanted("lead")) {
+    const bus = new LeadBus(plan, chunk);
+    out.push({ name: "lead", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.lead.reverbSend, delaySend: plan.lead.delaySend, duckAmount: plan.lead.duckAmount });
+  }
+  if (wanted("arp")) {
+    const bus = new ArpBus(plan, chunk);
+    out.push({ name: "arp", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.arp.reverbSend, delaySend: plan.arp.delaySend, duckAmount: plan.arp.duckAmount });
+  }
+  if (wanted("pads")) {
+    const bus = new PadsBus(plan, chunk);
+    out.push({ name: "pads", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.pads.reverbSend, delaySend: 0, duckAmount: plan.pads.duckAmount });
+  }
+  if (wanted("fx")) {
+    const bus = new FxBus(plan, chunk);
+    out.push({ name: "fx", render: (L, R, s, c) => bus.render(L, R, s, c), reverbSend: plan.fx.reverbSend, delaySend: 0, duckAmount: 0 });
+  }
+  return out;
+}
+
+function buildSends(plan: TrackPlan, sampleRate: number): Sends {
+  const reverb = new Reverb(sampleRate, 0);
+  reverb.decay = plan.sends.reverb.decay;
+  reverb.brightness = plan.sends.reverb.brightness;
+  reverb.size = plan.sends.reverb.size;
+  reverb.preDelaySeconds = plan.sends.reverb.preDelay;
+  reverb.update();
+  const delay = new StereoDelay(sampleRate, 2);
+  delay.timeL = plan.sends.delay.timeL;
+  delay.timeR = plan.sends.delay.timeR;
+  delay.feedback = plan.sends.delay.feedback;
+  delay.damping = plan.sends.delay.damping;
+  delay.pingPong = true;
+  return {
+    reverb,
+    reverbReturn: db2gain(plan.sends.reverb.returnDb),
+    delay,
+    delayReturn: db2gain(plan.sends.delay.returnDb),
+  };
+}
+
+/** Warm-up before the measured window, so filters and reverb have settled. */
+const PROBE_WARMUP_SECONDS = 0.8;
+/** Length of the measured window. Matches the short-term window in loudness.ts. */
+const PROBE_WINDOW_SECONDS = 3;
+
+/**
+ * Measures the loudest section's short-term RMS on the pre-master sum.
+ *
+ * The loudest section is rendered FIRST, out of playback order, so the gain is
+ * known before a single sample of the real render is mixed. Rendering it
+ * properly would mean running the buses from sample zero to reach it, which
+ * for a drop starting at bar sixteen is most of the track - and time to first
+ * sound would go from about a second to about ten. So this renders a short
+ * probe with a fresh set of buses started at the section, plus a warm-up.
+ *
+ * The probe's filter and reverb state is therefore approximate rather than
+ * what a sequential render would have reached, and the buffer is discarded
+ * rather than reused - splicing it in would show a seam. Measured against the
+ * real render the two agree closely, and the OUTPUT is exact either way: the
+ * gain is a single multiply, so it is deterministic whatever the probe saw.
+ */
+function measureDrive(plan: TrackPlan, sampleRate: number): number {
+  const loud = plan.sections.filter((s) => s.intensity >= 0.9);
+  const section = loud.length > 0 ? loud[0] : plan.sections[plan.sections.length - 1];
+  if (!section) return -20;
+
+  const warm = Math.round(PROBE_WARMUP_SECONDS * sampleRate);
+  const window = Math.round(PROBE_WINDOW_SECONDS * sampleRate);
+  // a second in, so the section's own transition has passed
+  const measureFrom = Math.min(
+    section.startSample + sampleRate,
+    Math.max(section.startSample, section.endSample - window),
+  );
+  const start = Math.max(0, measureFrom - warm);
+  const total = measureFrom - start + window;
+  if (total <= 0) return -20;
+
+  const buses = buildBuses(plan, sampleRate, total, undefined);
+  const sends = buildSends(plan, sampleRate);
+  const L = new Float32Array(total);
+  const R = new Float32Array(total);
+  const busL = new Float32Array(total);
+  const busR = new Float32Array(total);
+  const revSend = new Float32Array(total);
+  const dlySend = new Float32Array(total);
+  const frame = new Float64Array(2);
+
+  for (const w of buses) {
+    busL.fill(0);
+    busR.fill(0);
+    w.render(busL, busR, start, total);
+    // a fresh ducker per bus: it must be read from the same position each time
+    const ducker = new Ducker(
+      plan.kickPositions, sampleRate, plan.duck.depth, plan.duck.attack, plan.duck.release,
+    );
+    for (let i = 0; i < total; i++) {
+      const duck = ducker.step(start + i);
+      const g = w.duckAmount > 0 ? 1 - w.duckAmount * (1 - duck) : 1;
+      const l = busL[i] * g;
+      const r = busR[i] * g;
+      L[i] += l;
+      R[i] += r;
+      if (w.reverbSend > 0) revSend[i] += (l + r) * 0.5 * w.reverbSend;
+      if (w.delaySend > 0) dlySend[i] += (l + r) * 0.5 * w.delaySend;
+    }
+  }
+  for (let i = 0; i < total; i++) {
+    sends.reverb.process(revSend[i], frame);
+    L[i] += frame[0] * sends.reverbReturn;
+    R[i] += frame[1] * sends.reverbReturn;
+    sends.delay.process(dlySend[i], dlySend[i], frame);
+    L[i] += frame[0] * sends.delayReturn;
+    R[i] += frame[1] * sends.delayReturn;
+  }
+
+  const from = measureFrom - start;
+  let sum = 0;
+  for (let i = from; i < total; i++) sum += L[i] * L[i] + R[i] * R[i];
+  const n = (total - from) * 2;
+  return gain2db(dsqrt(sum / (n > 0 ? n : 1)));
 }
 
 /** Drives a TrackRenderer to completion into one buffer. */
