@@ -5,7 +5,9 @@
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "engines": { "node": ">=22.6" },
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "render": "node cli/render.ts",
     "batch": "node cli/batch.ts",
@@ -19,7 +21,10 @@
     "test:browser": "node test/browser-determinism.mjs",
     "brand": "node brand/build-brand.mjs",
     "build": "node tools/build-web.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run test"
+    "verify": "npm run lint && npm run typecheck && npm run test",
+    "tracks": "node tools/build-tracks-page.mjs",
+    "build:all": "npm run brand && npm run tracks && npm run build",
+    "serve": "node tools/serve.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

@@ -1,0 +1,363 @@
+/*
+ * Nullsample.
+ *
+ * The interface is instrumentation, not marketing. The waveform is the hero,
+ * drawn as the track renders. Six colour values; if a seventh is needed, that
+ * is decoration.
+ *
+ * --dim is lifted from the #6B7480 in the brief to #7A8391: the original
+ * measured 4.20:1 on --void, under the 4.5:1 floor. It now measures 5.20:1 on
+ * --void and 4.86:1 on --panel.
+ */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --void: #08090c;
+  --panel: #101317;
+  --line: #1e232b;
+  --dim: #7a8391;
+  --text: #e4e7eb;
+  --flare: #ff6a1a;
+
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* modular scale, 1.25. Nothing below 12px: smaller than that fails the
+     legible-font-size floor on mobile, and mono is already narrow. */
+  --t-micro: 12px;
+  --t-body: 13.5px;
+  --t-lead: 16px;
+  --t-read: 21px;
+
+  --gap: 14px;
+  --edge: 24px;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--void); }
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text);
+  font: 400 var(--t-body) / 1.5 var(--mono);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* every interactive element gets a real focus ring, never the browser default */
+:focus-visible {
+  outline: 2px solid var(--flare);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--flare); }
+
+.wrap {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 var(--edge) 64px;
+}
+
+/* ------------------------------------------------------------------ head - */
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap);
+  padding: 18px 0 22px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.mark { display: block; width: 22px; height: 22px; flex: none; align-self: center; }
+.wordmark {
+  font-weight: 500;
+  font-size: var(--t-lead);
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+.tag { color: var(--dim); font-size: var(--t-micro); }
+nav { margin-left: auto; display: flex; gap: 16px; }
+nav a { color: var(--dim); text-decoration: none; font-size: var(--t-micro); }
+nav a:hover, nav a[aria-current="page"] { color: var(--text); }
+
+/* -------------------------------------------------------------- waveform - */
+
+.scope {
+  position: relative;
+  margin: 22px 0 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  /* dot matrix: the instrument's graph paper */
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 14px 14px;
+  background-position: 0 0;
+}
+.scope canvas {
+  display: block;
+  width: 100%;
+  height: 240px;
+}
+.marks {
+  display: flex;
+  height: 18px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.marks span {
+  font-size: var(--t-micro);
+  color: var(--dim);
+  padding-left: 5px;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 17px;
+  flex: none;
+}
+.marks span:first-child { border-left: 0; padding-left: 0; }
+.marks span.live { color: var(--flare); }
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0 0;
+  font-size: var(--t-micro);
+  color: var(--dim);
+}
+.axis .state { color: var(--text); }
+
+/* ------------------------------------------------------------- transport - */
+
+.transport {
+  display: flex;
+  gap: var(--gap);
+  align-items: stretch;
+  margin: 20px 0 0;
+  flex-wrap: wrap;
+}
+
+button {
+  font: 400 var(--t-body) / 1 var(--mono);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 0 16px;
+  min-height: 44px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+button:hover:not(:disabled) { border-color: var(--dim); }
+button:disabled { color: var(--dim); cursor: default; }
+
+/* the primary action is the widest control on the page, and the only place
+   --flare is used as a fill */
+.primary {
+  flex: 1 1 320px;
+  background: var(--flare);
+  color: var(--void);
+  border-color: var(--flare);
+  font-weight: 500;
+  font-size: var(--t-lead);
+  letter-spacing: 0.1em;
+  min-height: 56px;
+}
+.primary:hover:not(:disabled) { filter: brightness(1.12); border-color: var(--flare); }
+.primary:disabled { background: var(--panel); color: var(--dim); border-color: var(--line); }
+
+.icon { flex: none; width: 52px; padding: 0; font-size: var(--t-lead); }
+
+/* ------------------------------------------------------------------ seed - */
+
+.serial {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0 12px;
+  min-height: 56px;
+}
+.serial label { color: var(--dim); font-size: var(--t-micro); }
+.serial input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: 500 var(--t-read) / 1 var(--mono);
+  letter-spacing: 0.1em;
+  padding: 0;
+}
+.serial input:focus-visible { outline-offset: 4px; }
+
+/* ------------------------------------------------------------------ meta - */
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 1px;
+  margin: 18px 0 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.readout div { background: var(--void); padding: 9px 11px; }
+.readout dt { color: var(--dim); font-size: var(--t-micro); margin: 0; }
+.readout dd { margin: 2px 0 0; font-size: var(--t-body); }
+
+/* ----------------------------------------------------------------- buses - */
+
+.lanes { margin: 26px 0 0; border-top: 1px solid var(--line); }
+.lane {
+  display: grid;
+  grid-template-columns: 44px 84px 1fr 62px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.lock {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--t-micro);
+  color: var(--dim);
+}
+.lock[aria-pressed="true"] {
+  background: var(--flare);
+  border-color: var(--flare);
+  color: var(--void);
+}
+.lane .name { color: var(--dim); font-size: var(--t-micro); }
+.lane[data-locked="true"] .name { color: var(--text); }
+.lane canvas { display: block; width: 100%; height: 22px; }
+.lane .db { color: var(--dim); font-size: var(--t-micro); text-align: right; }
+
+/* --------------------------------------------------------------- sliders - */
+
+.words { display: grid; gap: 2px; margin: 24px 0 0; }
+.word {
+  display: grid;
+  grid-template-columns: 84px 1fr 108px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.word > label { color: var(--dim); font-size: var(--t-micro); }
+.word .value { color: var(--text); font-size: var(--t-micro); text-align: right; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  height: 30px;
+  margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--line);
+}
+input[type="range"]::-moz-range-track { height: 1px; background: var(--line); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 3px;
+  height: 18px;
+  background: var(--text);
+  border: 0;
+  border-radius: 0;
+  margin-top: -8px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 3px;
+  height: 18px;
+  background: var(--text);
+  border: 0;
+  border-radius: 0;
+}
+input[type="range"]:hover::-webkit-slider-thumb { background: var(--flare); }
+input[type="range"]:hover::-moz-range-thumb { background: var(--flare); }
+
+/* ----------------------------------------------------------------- files - */
+
+.files { display: flex; gap: var(--gap); margin: 26px 0 0; flex-wrap: wrap; }
+
+footer {
+  margin: 44px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  font-size: var(--t-micro);
+  max-width: 58ch;
+}
+footer a { color: var(--dim); }
+
+.problem {
+  border: 1px solid var(--flare);
+  background: var(--panel);
+  padding: 12px 14px;
+  margin: 18px 0 0;
+  max-width: 58ch;
+}
+.problem b { color: var(--flare); font-weight: 500; display: block; margin-bottom: 4px; }
+
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] { display: none !important; }
+
+/* ------------------------------------------------------------------ prose */
+
+.prose { max-width: 62ch; margin: 26px 0 0; }
+.prose h2 { font-size: var(--t-lead); font-weight: 500; margin: 30px 0 8px; }
+.prose p { margin: 0 0 14px; color: var(--text); }
+.prose li { margin: 0 0 7px; }
+.prose code { color: var(--flare); }
+
+table.tracks { width: 100%; border-collapse: collapse; margin: 20px 0 0; font-size: var(--t-body); }
+table.tracks th, table.tracks td {
+  text-align: left;
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+table.tracks th { color: var(--dim); font-size: var(--t-micro); font-weight: 400; }
+table.tracks td a { text-decoration: none; }
+table.tracks td a:hover { text-decoration: underline; }
+
+@media (max-width: 620px) {
+  :root { --edge: 16px; --t-read: 18px; }
+  .scope canvas { height: 176px; }
+  .lane { grid-template-columns: 38px 70px 1fr 54px; gap: 8px; }
+  .word { grid-template-columns: 68px 1fr 92px; gap: 8px; }
+  nav { width: 100%; margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

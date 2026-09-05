@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Nullsample works — synthesis from code, zero samples</title>
+<meta name="description" content="How a track is synthesised from oscillators, noise, envelopes and filters, why the engine cannot call Math.sin, and what zero samples actually means.">
+<link rel="canonical" href="https://nullsample.maqsudjon.com/about/">
+<meta name="theme-color" content="#08090C">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="How Nullsample works — synthesis from code, zero samples">
+<meta property="og:description" content="How a track is synthesised from oscillators, noise, envelopes and filters, why the engine cannot call Math.sin, and what zero samples actually means.">
+<meta property="og:image" content="https://nullsample.maqsudjon.com/og-default.png">
+<meta property="og:url" content="https://nullsample.maqsudjon.com/about/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Nullsample">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How Nullsample works — synthesis from code, zero samples">
+<meta name="twitter:description" content="How a track is synthesised from oscillators, noise, envelopes and filters, why the engine cannot call Math.sin, and what zero samples actually means.">
+<meta name="twitter:image" content="https://nullsample.maqsudjon.com/og-default.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+    <path d="M3 16 L14 16" stroke="#7A8391" stroke-width="2.6" fill="none"/>
+    <path d="M17 25 L17 7 L29 25" stroke="#FF6A1A" stroke-width="2.6" fill="none" stroke-linejoin="miter"/>
+  </svg>
+  <a class="wordmark" href="/" style="text-decoration:none;color:inherit">NULLSAMPLE</a>
+  <span class="tag">music generated from code. zero samples.</span>
+  <nav>
+    <a href="/">generator</a>
+    <a href="/about/" aria-current="page">how it works</a>
+    <a href="/tracks/">tracks</a>
+  </nav>
+</header>
+<main class="prose">
+<h1 style="font-size:21px;font-weight:500;margin:26px 0 6px">How it works</h1>
+<p>Nullsample writes music the way a synthesiser makes sound, not the way a sampler does.
+There is no audio in this website. There are no loops, no one-shot samples, no impulse
+responses, and no trained model. Every sound you hear was computed from arithmetic on your
+own device, a few milliseconds before it reached your speakers.</p>
+
+<h2>What a track is made of</h2>
+<p>Sound is a list of numbers — 44,100 of them per second, per channel. Everything below is
+a rule for producing the next number.</p>
+<ul>
+  <li><b>Oscillators</b> produce a repeating shape: a sawtooth, a pulse, a triangle, a sine.
+    Naive versions of these alias badly, so the engine uses band-limited forms that correct
+    the waveform at each discontinuity. Aliasing here is a deliberate choice, never an accident.</li>
+  <li><b>Noise</b> is a stream of pseudo-random numbers. Filtered hard, it becomes a hi-hat.
+    Filtered gently and enveloped, it becomes a snare's rattle or a riser.</li>
+  <li><b>Envelopes</b> shape loudness and pitch over the life of a note. A kick drum is a sine
+    whose pitch falls from 180&nbsp;Hz to 46&nbsp;Hz in about 30&nbsp;milliseconds; that fall is
+    the entire character of the sound.</li>
+  <li><b>Filters</b> remove or emphasise parts of the spectrum. The one used here is a
+    state-variable design that stays stable when its cutoff is swept quickly, which a naive
+    filter does not.</li>
+  <li><b>Nonlinear stages</b> — saturation, waveshaping, clipping — add harmonics that were not
+    there. They also add frequencies above what the sample rate can represent, which fold back
+    as inharmonic noise, so each of them runs inside a region computed at four times the normal
+    rate and filtered back down.</li>
+  <li><b>Reverb</b> is a network of eight delay lines feeding back through a mixing matrix, with
+    line lengths chosen to be mutually prime so the tail never settles into an audible pattern.
+    It is generated, not recorded — shipping a recorded impulse response would be shipping a
+    sample.</li>
+</ul>
+
+<h2>Why the same seed always gives the same track</h2>
+<p>A seed is the only input. It is expanded into a random number generator, and every decision —
+tempo, key, chord loop, which arrangement, where the kick lands, how far the filter opens — is
+drawn from it. Paste the same seed and you get the same track, on any machine, in any browser.</p>
+<p>That is harder than it sounds. JavaScript specifies <code>+</code>, <code>-</code>,
+<code>*</code> and <code>/</code> exactly, but it explicitly leaves <code>Math.sin</code>,
+<code>Math.exp</code>, <code>Math.log</code>, <code>Math.pow</code> and <code>Math.sqrt</code> as
+"implementation-approximated". Different browser engines really do differ in the last bit. One
+differing bit inside a filter's feedback path becomes an audible difference within a second.</p>
+<p>So the engine does not call any of them. It rebuilds sine, exponential, logarithm and square
+root from exact arithmetic — polynomial series and a fixed number of Newton steps — accurate to
+about one part in a quadrillion, and identical everywhere. A lint rule fails the build if any
+file under the engine calls the built-in versions, and a test renders the same seeds in Node and
+in headless Chrome and compares the files byte for byte.</p>
+
+<h2>Why zero samples matters</h2>
+<p>Most "AI music" and most loop-based generators are built on recordings. That raises questions
+about what was in the training set or the sample pack, and who owns the result. Nullsample has
+nothing to be unclear about: there is no recorded audio anywhere in it, so there is nothing in
+your track that came from someone else's.</p>
+<p>It is also why the whole thing fits in about 70&nbsp;kilobytes and runs with no server. A
+sample library would be hundreds of megabytes and would have to be hosted. An algorithm is small.</p>
+
+<h2>What runs where</h2>
+<p>Everything runs on your device. The page is static files; there is no backend, no queue and no
+storage. Rendering happens in a background thread so the interface stays responsive, and playback
+begins after the first few bars while the rest is still being computed. The audio you hear and the
+file you download are produced by the same code in the same order, so they are the same bytes.</p>
+
+<h2>The honest limitations</h2>
+<ul>
+  <li>One genre. A preset that sounds convincing takes a long time to tune, and ten shallow ones
+    would be worse than one deep one.</li>
+  <li>A full two-minute track takes roughly 25&nbsp;seconds of computation on a laptop. Playback
+    starts long before that, but the download is only ready when the render is.</li>
+  <li>The melodies are generated under constraints, not composed. They are shaped — a contour, a
+    bounded interval jump, a resolution — but they are not going to surprise you the way a person
+    would.</li>
+</ul>
+</main>
+<footer>
+  <p>Audio is synthesised on your device and never uploaded. Analytics are cookieless and count
+  page views only. <a href="https://github.com/maqsudjon-cell/nullsample">Source</a></p>
+</footer>
+</div>
+<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

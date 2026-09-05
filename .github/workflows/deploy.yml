@@ -1,0 +1,73 @@
+name: build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: determinism lint
+        run: npm run lint
+      - name: typecheck
+        run: npm run typecheck
+      - name: tests
+        run: npm test
+      - name: cross-host determinism
+        # Node and headless Chrome must produce byte-identical WAVs. This is
+        # the check that the whole deterministic-maths layer exists for.
+        run: npm run test:browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: brand assets
+        run: npm run brand
+      - name: tracks page
+        run: node tools/build-tracks-page.mjs
+      - name: build site
+        run: npm run build
+      - name: CNAME must be in the published output
+        run: |
+          test -f dist/CNAME || { echo "dist/CNAME missing"; exit 1; }
+          grep -qx "nullsample.maqsudjon.com" dist/CNAME || { echo "wrong CNAME"; exit 1; }
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
