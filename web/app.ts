@@ -393,7 +393,11 @@ function unlockAudio(): AudioContext | null {
       masterGain = ctx.createGain();
       masterGain.gain.value = 1;
       masterGain.connect(ctx.destination);
-      if (debugEnabled()) attachAnalyser();
+      // The spectrum reads this too, not just #debug. Gating it on debug mode
+      // meant paintSpectrum() returned on its first line for every ordinary
+      // visitor - the element shipped and stayed empty, and the data path I
+      // checked through #debug was the one case where the node existed.
+      if (!reducedMotion || debugEnabled()) attachAnalyser();
       ctx.addEventListener("statechange", onContextStateChange);
     }
     setAudioSession();
