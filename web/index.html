@@ -64,7 +64,10 @@
       <h1>Music, built from<br>arithmetic.</h1>
       <p class="lede">No samples. No loops. No model. Press once and it exists.</p>
     </div>
-    <div class="herowrap"><canvas id="herowave" role="img" aria-label="Waveform of the demo track"></canvas></div>
+    <div class="herowrap">
+      <p class="herosection" id="herosection">&nbsp;</p>
+      <canvas id="herowave" role="img" aria-label="Waveform of the demo track"></canvas>
+    </div>
     <div class="inner herobar">
       <button type="button" id="heroplay" class="primary">&#9654;&nbsp; HEAR IT</button>
       <a class="ghost cta" id="herolink" href="/generate/">MAKE ONE</a>
@@ -79,6 +82,7 @@
       <h2 class="sr">How it works, demonstrated</h2>
       <div class="cardgrid">
         <article class="card" id="card-nothing">
+          <p class="cardlabel" id="lab-nothing">&nbsp;</p>
           <canvas class="cardart" id="art-nothing" role="img" aria-label="From nothing"></canvas>
           <div class="cardfoot">
             <div><h3>From nothing</h3><p>Every sound starts as arithmetic.</p></div>
@@ -87,7 +91,9 @@
           <audio id="aud-nothing" preload="none" src="/demos/card-nothing.mp3"></audio>
         </article>
         <article class="card" id="card-dist">
+          <p class="cardlabel">&nbsp;</p>
           <canvas class="cardart" id="art-dist" role="img" aria-label="Controlled destruction"></canvas>
+          <div class="stagerow" id="lab-dist" aria-hidden="true"></div>
           <div class="cardfoot">
             <div><h3>Controlled destruction</h3><p>Distortion in three stages, oversampled four times.</p></div>
             <button type="button" class="cardplay" data-card="dist" aria-label="Play Controlled destruction">&#9654;</button>
@@ -95,6 +101,7 @@
           <audio id="aud-dist" preload="none" src="/demos/card-dist.mp3"></audio>
         </article>
         <article class="card" id="card-b808">
+          <p class="cardlabel" id="lab-b808">&nbsp;</p>
           <canvas class="cardart" id="art-b808" role="img" aria-label="The 808"></canvas>
           <div class="cardfoot">
             <div><h3>The 808</h3><p>A sine, bent in sixty milliseconds.</p></div>
@@ -103,7 +110,11 @@
           <audio id="aud-b808" preload="none" src="/demos/card-808.mp3"></audio>
         </article>
         <article class="card" id="card-parts">
-          <canvas class="cardart" id="art-parts" role="img" aria-label="Six parts, never merged"></canvas>
+          <p class="cardlabel">&nbsp;</p>
+          <div class="partswrap">
+            <div class="lanelabels" id="lab-parts" aria-hidden="true"></div>
+            <canvas class="cardart" id="art-parts" role="img" aria-label="Six parts, never merged"></canvas>
+          </div>
           <div class="cardfoot">
             <div><h3>Six parts, never merged</h3><p>Stems come out separate because they were never mixed.</p></div>
             

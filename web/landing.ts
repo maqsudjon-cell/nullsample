@@ -143,17 +143,17 @@ function drawHero(progress = 0): void {
   }
   g.globalAlpha = 1;
 
-  // the tick that snaps into place, naming the section this excerpt came from
+  // The tick that snaps into place. Its label lives in the DOM above the
+  // canvas, not on top of the waveform - the canvas draws the signal and
+  // nothing else.
   if (heroDrawn >= 1 && heroSection) {
     g.strokeStyle = flare;
     g.beginPath();
     g.moveTo(0.5, 0);
     g.lineTo(0.5, h);
     g.stroke();
-    g.font = `11px ${css.getPropertyValue("--mono").trim() || "monospace"}`;
-    g.fillStyle = dim;
-    g.textBaseline = "top";
-    g.fillText(heroSection, 6, 5);
+    const label = document.getElementById("herosection");
+    if (label && label.textContent !== heroSection) label.textContent = heroSection;
   }
 }
 
@@ -185,9 +185,15 @@ async function boot(): Promise<void> {
   const heroAudio = $<HTMLAudioElement>("heroaudio");
   heroAudio.src = `/demos/${hero.file}`;
   $("heroseed").textContent = hero.seed;
+  // Tempo and length only. The landing page is for people who do not know what
+  // pentatonic means; it is the one place the jargon helps least.
   $("herometa").textContent =
-    `${hero.tempo.toFixed(1)} BPM  ·  ${hero.key.toUpperCase()}  ·  ${hero.bars} BARS  ·  ${hero.excerptSeconds}s excerpt`;
+    `${hero.tempo.toFixed(0)} BPM  ·  ${hero.excerptSeconds}s excerpt`;
   const heroBtn = $<HTMLButtonElement>("heroplay");
+
+  // Not "00:00 / 00:00" before anything has played - that reads as broken.
+  // The excerpt's length is the useful thing to know before pressing play.
+  $("herotime").textContent = clock(hero.excerptSeconds);
 
   heroPeaks = Float32Array.from(hero.peaks);
   heroSection = hero.fromSection;
@@ -221,8 +227,12 @@ async function boot(): Promise<void> {
     heroProgress = 0;
     heroStopped();
     drawHero(0);
+    $("herotime").textContent = clock(hero.excerptSeconds);
   });
-  $<HTMLAnchorElement>("herolink").href = `/generate/#s=${encodeURIComponent(hero.seed)}`;
+  // MAKE ONE carries no seed. It used to carry the hero's, so the button that
+  // says "make one" reproduced NULL-0001 - the opposite of what it says. The
+  // ticker and the demo list still carry theirs: reproducing a specific track
+  // is what those are for.
 
   // Everything below the hero is built when the browser is idle. It is all
   // below the fold, and building it during load was the single largest task
@@ -322,7 +332,7 @@ async function boot(): Promise<void> {
         <button type="button" class="demoplay" data-seed="${escapeHtml(t.seed)}"
           aria-label="Play the ${escapeHtml(t.seed)} excerpt">&#9654;</button>
         <a class="demoseed" href="/generate/#s=${encodeURIComponent(t.seed)}">${escapeHtml(t.seed)}</a>
-        <span class="demometa">${t.tempo.toFixed(1)} BPM &nbsp;&middot;&nbsp; ${escapeHtml(t.key)} &nbsp;&middot;&nbsp; ${clock(t.lengthSeconds)}</span>
+        <span class="demometa">${t.tempo.toFixed(0)} BPM &nbsp;&middot;&nbsp; ${clock(t.lengthSeconds)}</span>
         <audio id="demo-${escapeHtml(t.seed)}" preload="none" src="/demos/${escapeHtml(t.file)}"></audio>
       </li>`,
     )

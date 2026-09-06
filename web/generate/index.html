@@ -52,16 +52,16 @@
     <div class="inner">
       <div class="ruler" id="ruler" aria-hidden="true"></div>
       <div class="nowbar">
+        <button type="button" id="play" class="icon" aria-label="Play" disabled>&#9654;</button>
         <span class="nowname" id="nowname">&nbsp;</span>
         <span class="nowtimes"><span id="statelabel" class="statelabel"></span><b id="time">00:00</b> / <span id="duration">--:--</span></span>
       </div>
 
       <pre class="spectrum" id="spectrum" aria-hidden="true"></pre>
 
-      <div class="transport">
-        <button type="button" id="play" class="icon" aria-label="Play" disabled>&#9654;</button>
-        <button type="button" id="generate" class="primary">GENERATE</button>
+      <button type="button" id="generate" class="primary">GENERATE</button>
 
+      <div class="secondrow">
         <details class="menu" id="dlmenu">
           <summary id="download" aria-label="Download this track">DOWNLOAD</summary>
           <div class="menupanel">
@@ -70,7 +70,6 @@
             <p class="own">The audio you generate is yours &mdash; including commercially.</p>
           </div>
         </details>
-
         <button type="button" id="share" class="secondary">SHARE</button>
       </div>
 
@@ -99,7 +98,7 @@
       <div class="words" id="words"></div>
 
       <details class="tech" id="tech">
-        <summary>details</summary>
+        <summary><span>details</span><span class="techmark" aria-hidden="true"></span></summary>
         <div class="techbody">
           <dl id="techlist"></dl>
         </div>

@@ -103,6 +103,18 @@ function lerpWave(a: number[], b: number[], k: number): number[] {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Nothing is painted inside a canvas but the signal.
+ *
+ * Text over a moving line is unreadable and it looks unfinished, so every label
+ * that used to be drawn into a card now lives in the DOM around it - which also
+ * means it can be selected, translated and read by a screen reader.
+ */
+function setLabel(id: string, text: string): void {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
 /** Card 1 — silence becoming a sine becoming a saw becoming seven. */
 function drawFromNothing(c: HTMLCanvasElement, d: CardData["fromNothing"], t: number, progress: number) {
   const g = ctx2d(c);
@@ -121,10 +133,20 @@ function drawFromNothing(c: HTMLCanvasElement, d: CardData["fromNothing"], t: nu
   const k = span > 0 ? Math.min(1, Math.max(0, (time - (from.at ?? 0)) / Math.min(span, 0.7))) : 1;
   const wave = from === to ? from.wave : lerpWave(from.wave, to.wave, k);
   strokeWave(g, wave, w, h, progress > 0 ? css("--flare") : css("--text"));
-  g.font = `12px ${css("--mono")}`;
-  g.fillStyle = css("--mute");
-  g.textBaseline = "top";
-  g.fillText(k > 0.5 ? to.label : from.label, 12, 12);
+  setLabel("lab-nothing", k > 0.5 ? to.label : from.label);
+}
+
+/** The stage names, in a row beneath the canvas, one per stage column. */
+function paintStageRow(d: CardData["destruction"], active: number): void {
+  const host = document.getElementById("lab-dist");
+  if (!host) return;
+  if (host.children.length !== d.shapes.length) {
+    host.innerHTML = d.shapes.map((sh) => `<span>${sh.label}</span>`).join("");
+    host.style.gridTemplateColumns = `repeat(${d.shapes.length}, 1fr)`;
+  }
+  for (let i = 0; i < d.shapes.length; i++) {
+    (host.children[i] as HTMLElement).dataset.active = String(i === active);
+  }
 }
 
 /** Card 2 — one cycle flattening through the three stages. */
@@ -136,6 +158,7 @@ function drawDestruction(c: HTMLCanvasElement, d: CardData["destruction"], t: nu
   const n = d.shapes.length;
   const cw = w / n;
   const active = progress > 0 ? Math.min(n - 1, Math.floor((progress * d.duration) / d.stageSeconds)) : -1;
+  paintStageRow(d, active);
   for (let i = 0; i < n; i++) {
     g.save();
     g.beginPath();
@@ -149,10 +172,6 @@ function drawDestruction(c: HTMLCanvasElement, d: CardData["destruction"], t: nu
     g.lineTo(cw, Math.round(h / 2) + 0.5);
     g.stroke();
     strokeWave(g, d.shapes[i].wave, cw - 14, h, i === active ? css("--flare") : css("--text"));
-    g.font = `12px ${css("--mono")}`;
-    g.fillStyle = i === active ? css("--flare") : css("--dim");
-    g.textBaseline = "bottom";
-    g.fillText(d.shapes[i].label, 4, h - 8);
     g.restore();
     if (i > 0) {
       g.strokeStyle = css("--line");
@@ -196,14 +215,30 @@ function draw808(c: HTMLCanvasElement, d: CardData["bass808"], t: number, progre
     else g.lineTo(x, y);
   }
   g.stroke();
-  g.font = `12px ${css("--mono")}`;
-  g.fillStyle = css("--mute");
-  g.textBaseline = "top";
-  g.fillText(`+${d.dropSemitones} semitones`, 12, 10);
-  g.fillText(`${d.dropMs} ms`, 12, h - 24);
+  setLabel("lab-b808", `+${d.dropSemitones} semitones in ${d.dropMs} ms`);
 }
 
 /** Card 4 — one waveform sliding apart into six. */
+/**
+ * The six lane names, beside the canvas rather than inside it, each aligned to
+ * its lane by flex order. They fade in with the split so the merged state still
+ * reads as one waveform.
+ */
+function paintLaneLabels(d: CardData["sixParts"], playing: number, hover: number, split: number): void {
+  const host = document.getElementById("lab-parts");
+  if (!host) return;
+  if (host.children.length !== d.lanes.length) {
+    host.innerHTML = d.lanes
+      .map((l) => `<span>${l.name === "bass808" ? "808" : l.name}</span>`)
+      .join("");
+  }
+  host.style.opacity = split.toFixed(2);
+  for (let i = 0; i < d.lanes.length; i++) {
+    const el = host.children[i] as HTMLElement;
+    el.dataset.active = String(i === playing || i === hover);
+  }
+}
+
 function drawSixParts(
   c: HTMLCanvasElement,
   d: CardData["sixParts"],
@@ -220,8 +255,7 @@ function drawSixParts(
   const laneH = h / n;
   // 0 = merged into one, 1 = fully separated
   const split = progress > 0 || hover >= 0 || playing >= 0 ? 1 : Math.min(1, Math.max(0, ((t / 1000) % 6) / 2 - 0.15));
-  g.font = `12px ${css("--mono")}`;
-  g.textBaseline = "middle";
+  paintLaneLabels(d, playing, hover, split);
   for (let i = 0; i < n; i++) {
     const lane = d.lanes[i];
     const merged = h / 2;
@@ -230,15 +264,11 @@ function drawSixParts(
     const active = i === playing || i === hover;
     g.fillStyle = active ? css("--flare") : css("--line-hi");
     const peaks = lane.peaks;
-    const bw = (w - 74) / peaks.length;
+    const bw = w / peaks.length;
     for (let k = 0; k < peaks.length; k++) {
       const a = Math.max(0.6, peaks[k] * (laneH * 0.42) * (0.35 + 0.65 * split));
-      g.fillRect(74 + k * bw, y - a, Math.max(1, bw - 0.4), a * 2);
+      g.fillRect(k * bw, y - a, Math.max(1, bw - 0.4), a * 2);
     }
-    g.fillStyle = active ? css("--flare") : css("--mute");
-    g.globalAlpha = split;
-    g.fillText(lane.name === "bass808" ? "808" : lane.name, 8, y);
-    g.globalAlpha = 1;
   }
 }
 

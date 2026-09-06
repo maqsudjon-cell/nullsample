@@ -137,10 +137,19 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); }
 
 .nowbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 14px;
-  min-height: 46px;
+  min-height: 52px;
   padding: 0 0 4px;
+}
+/* Play/pause belongs with the timecode and the section name, under the
+   waveform - not in the action group with reroll and download. */
+.nowbar .icon {
+  width: 44px;
+  height: 44px;
+  font-size: var(--t-body);
+  border-radius: 50%;
+  flex: none;
 }
 .nowname {
   font-size: var(--t-head);
@@ -171,7 +180,14 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); }
 
 /* ------------------------------------------------------------- transport - */
 
-.transport { display: flex; gap: 12px; align-items: center; margin: 20px 0 0; flex-wrap: wrap; }
+/* Three tiers, and no wrapping. Transport lives on the timecode line where a
+   transport control belongs; REROLL is alone and full width; download and
+   share split the row beneath. Four controls of three different importances
+   in one undifferentiated block was the problem. */
+.primary { width: 100%; margin: 18px 0 0; justify-content: center; }
+.secondrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 0; }
+.secondrow > * { width: 100%; }
+.secondrow .secondary, .secondrow .menu > summary { justify-content: center; width: 100%; }
 
 button {
   font: 400 var(--t-body) / 1 var(--mono);
@@ -322,19 +338,22 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
    reserved: --flare marks the kept lanes and nothing else here. */
 .lane {
   display: grid;
-  grid-template-columns: 74px 1fr 4.6rem;
+  grid-template-columns: 74px 1fr 4.8rem;
   align-items: center;
   gap: 12px;
-  padding: 7px 0;
+  min-height: 44px;
+  padding: 0;
   width: 100%;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
   background: transparent;
   text-align: left;
   height: auto;
   cursor: pointer;
 }
-.lane:hover { border-bottom-color: var(--line-hi); }
+.lanes .lane:last-child { border-bottom: 1px solid var(--line); }
+.lane:hover { background: var(--raise); }
+.lane:active { background: var(--panel); }
 .lane:focus-visible { outline: 2px solid var(--flare); outline-offset: 2px; }
 /* Addendum 10 asks unkept lanes to recede to --dim. --dim is 3.19:1 against
    the ground, which fails AA for text, so the label recedes to --mute and the
@@ -342,16 +361,23 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
    kept/unkept contrast stays obvious from arm's length either way. */
 .lane .name { color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 .lane canvas { display: block; width: 100%; height: 16px; }
+/* Always present: `keep` before, `keeping` after. The word sitting there
+   unpressed is what teaches the interaction - the hint is now reinforcement
+   rather than the only signal there is one. */
 .lane .keepmark {
-  color: var(--flare);
+  /* Addendum 11 asks for --dim here. --dim is 3.19:1 and this word is the
+     entire teaching signal for the interaction - a label nobody can read
+     teaches nothing. --mute at 5.86:1 is the quietest token that still says
+     it. Same trade as the lane names and the on-device line. */
+  color: var(--mute);
   font-size: var(--t-micro);
   letter-spacing: 0.08em;
   text-align: right;
-  visibility: hidden;
 }
 .lane[data-keep="true"] .name { color: var(--bright); }
-.lane[data-keep="true"] .keepmark { visibility: visible; }
-.lane[data-keep="true"] { border-bottom-color: var(--flare-dim); }
+.lane[data-keep="true"] .keepmark { color: var(--flare); }
+.lane[data-keep="true"] { border-top-color: var(--flare-dim); }
+.lane[data-keep="true"] + .lane { border-top-color: var(--flare-dim); }
 
 /* Shown once, after the first track finishes, and gone for good after the
    first keep. */
@@ -385,18 +411,25 @@ input[type="range"]:hover::-moz-range-thumb { background: var(--flare); }
    Everything a listener did not ask for. Off by default, remembered only in
    memory, and named for what it is rather than as a debug panel. */
 
-.tech { margin: 30px 0 0; border-top: 1px solid var(--line); padding-top: 12px; }
+/* A full-width row with the label left and +/- right, the whole row tappable -
+   the same species as a lane, so the two read as the same kind of thing. A
+   bare "+ details" in body text was invisible to anyone not looking for it. */
+.tech { margin: 22px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .tech > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
   cursor: pointer;
   color: var(--mute);
   font-size: var(--t-micro);
+  letter-spacing: 0.04em;
   list-style: none;
-  padding: 4px 0;
 }
 .tech > summary::-webkit-details-marker { display: none; }
-.tech > summary::before { content: "+ "; color: var(--dim); }
-.tech[open] > summary::before { content: "\2212 "; }
-.tech > summary:hover { color: var(--text); }
+.tech > summary:hover { background: var(--raise); color: var(--text); }
+.techmark::after { content: "+"; color: var(--dim); font-size: var(--t-body); }
+.tech[open] .techmark::after { content: "\2212"; }
 .techbody { padding: 10px 0 0; color: var(--mute); font-size: var(--t-micro); line-height: 1.9; }
 .techbody dl { display: grid; grid-template-columns: 130px 1fr; gap: 0 14px; margin: 0; }
 .techbody dt { color: var(--dim); }
@@ -446,7 +479,8 @@ table.tracks td a:hover { text-decoration: underline; }
   .primary { padding: 0 22px; letter-spacing: 0.1em; }
   .transport { gap: 10px; }
   .serial { flex-basis: 100%; }
-  .nowbar { min-height: 40px; }
+  .nowbar {
+  --transport: 44px; min-height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -498,6 +532,15 @@ table.tracks td a:hover { text-decoration: underline; }
 .fine a, .lede a { color: var(--text); }
 
 .herowrap { width: 100%; }
+.herosection {
+  margin: 0;
+  padding: 0 0 4px;
+  /* --mute, not --dim: --dim is 3.19:1 on the ground and this is text. */
+  color: var(--mute);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  min-height: 1.3em;
+}
 .herowrap canvas { display: block; width: 100%; height: 150px; }
 
 .herobar { display: flex; align-items: center; gap: 14px; padding-top: 18px; flex-wrap: wrap; }
@@ -552,6 +595,35 @@ table.tracks td a:hover { text-decoration: underline; }
    should be laid out for an element that renders nothing. */
 audio:not([controls]) { display: none; }
 .cardart { display: block; width: 100%; height: 190px; }
+
+/* Labels live around the canvas, never in it. */
+.cardlabel {
+  margin: 0;
+  padding: 12px 18px 6px;
+  color: var(--mute);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  min-height: 1.4em;
+}
+.stagerow {
+  display: grid;
+  padding: 6px 0 0;
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+.stagerow span { color: var(--mute); text-align: center; }
+.stagerow span[data-active="true"] { color: var(--flare); }
+.partswrap { display: grid; grid-template-columns: 4.4rem 1fr; align-items: stretch; }
+.lanelabels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding-left: 18px;
+  font-size: var(--t-micro);
+  transition: opacity 200ms linear;
+}
+.lanelabels span { color: var(--mute); }
+.lanelabels span[data-active="true"] { color: var(--flare); }
 .cardfoot {
   display: flex;
   align-items: flex-start;

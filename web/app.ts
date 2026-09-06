@@ -1021,7 +1021,7 @@ function renderLanes(info: PlanInfo): void {
             aria-pressed="false" aria-label="Keep ${label} when you reroll">
           <span class="name">${label}</span>
           <canvas data-bus="${bus}" aria-hidden="true"></canvas>
-          <span class="keepmark">keeping</span>
+          <span class="keepmark"></span>
         </button>`;
       })
       .join("");
@@ -1036,6 +1036,11 @@ function renderLanes(info: PlanInfo): void {
     if (lane) {
       lane.dataset.keep = String(kept);
       lane.setAttribute("aria-pressed", String(kept));
+      // The word is there before anything is tapped. `keeping` only appearing
+      // after a tap meant nothing on screen ever said a tap was possible -
+      // the lanes read as a readout, which is what they looked like.
+      const mark = lane.querySelector<HTMLElement>(".keepmark");
+      if (mark) mark.textContent = kept ? "keeping" : "keep";
     }
   }
 }
