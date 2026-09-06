@@ -116,7 +116,6 @@ function drawHero(progress = 0): void {
   g.clearRect(0, 0, w, h);
   const css = getComputedStyle(document.documentElement);
   const line = css.getPropertyValue("--line").trim();
-  const dim = css.getPropertyValue("--dim").trim();
   const text = css.getPropertyValue("--text").trim();
   const flare = css.getPropertyValue("--flare").trim();
   const mid = Math.round(h / 2);

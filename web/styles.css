@@ -5,9 +5,23 @@
  * drawn as the track renders. Six colour values; if a seventh is needed, that
  * is decoration.
  *
- * --dim is lifted from the #6B7480 in the brief to #7A8391: the original
- * measured 4.20:1 on --void, under the 4.5:1 floor. It now measures 5.20:1 on
- * --void and 4.86:1 on --panel.
+ * --dim is #747D8A: 4.78:1 on --void and 4.61:1 on --raise, so it clears the
+ * 4.5:1 floor for text on both the page ground and the hover ground - a lane's
+ * `keep` label sits on --raise while the row is hovered.
+ *
+ * It has been here before. The brief's #6B7480 measured 4.20:1 and was lifted
+ * to #7A8391 for exactly this reason; Addendum 3's expanded ramp then reset it
+ * to #59616E, which reads 3.19:1 - and every "use --mute instead" deviation
+ * since has been a symptom of that one number. Fixing the token removes the
+ * need for the exceptions.
+ *
+ * The cost is ramp separation: --dim and --mute are now 1.22:1 apart rather
+ * than 1.84:1, so they are close cousins. --dim is still the quieter of the
+ * two and the two are used for different jobs, but if a future pass wants a
+ * genuinely faint grey it needs a new token for non-text use, not this one.
+ *
+ * One place still needs care: --dim on --panel is 4.39:1. The debug panel is
+ * the only --dim text on that ground and it uses --mute instead.
  *
  * Font URLs are absolute, not relative. This stylesheet is inlined into every
  * page, so a relative URL would resolve against the PAGE - and /generate/
@@ -43,7 +57,7 @@
   --panel: #12151a;
   --line: #1c2028;
   --line-hi: #2a303a;
-  --dim: #59616e;
+  --dim: #747d8a;
   --mute: #838c99;
   --text: #d8dce2;
   --bright: #f2f4f7;
@@ -275,8 +289,9 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
 
 .ondevice {
   margin: 12px 0 0;
-  /* --mute, not --dim: --dim is 3.19:1 on the ground and this is body text.
-     The same trap the ticker links fell into. */
+  /* --mute rather than --dim. The original reason was contrast and no longer
+     applies now the token clears AA; it stays because this line is a claim
+     about the product, not a caption, and reads at the same weight as one. */
   color: var(--mute);
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
@@ -355,21 +370,17 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
 .lane:hover { background: var(--raise); }
 .lane:active { background: var(--panel); }
 .lane:focus-visible { outline: 2px solid var(--flare); outline-offset: 2px; }
-/* Addendum 10 asks unkept lanes to recede to --dim. --dim is 3.19:1 against
-   the ground, which fails AA for text, so the label recedes to --mute and the
-   receding is carried by the strip and the `keeping` marker instead - the
-   kept/unkept contrast stays obvious from arm's length either way. */
+/* --mute rather than the --dim Addendum 10 asked for. That started as a
+   contrast fix and the token has since been raised, so it stays only because
+   the lane NAME is the row's label while `keep` beside it is the quieter
+   instruction - and they should not be the same weight. */
 .lane .name { color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 .lane canvas { display: block; width: 100%; height: 16px; }
 /* Always present: `keep` before, `keeping` after. The word sitting there
    unpressed is what teaches the interaction - the hint is now reinforcement
    rather than the only signal there is one. */
 .lane .keepmark {
-  /* Addendum 11 asks for --dim here. --dim is 3.19:1 and this word is the
-     entire teaching signal for the interaction - a label nobody can read
-     teaches nothing. --mute at 5.86:1 is the quietest token that still says
-     it. Same trade as the lane names and the on-device line. */
-  color: var(--mute);
+  color: var(--dim);
   font-size: var(--t-micro);
   letter-spacing: 0.08em;
   text-align: right;
@@ -507,7 +518,9 @@ table.tracks td a:hover { text-decoration: underline; }
 .debugpanel b { display: block; color: var(--flare); font-weight: 500; margin-bottom: 5px; }
 .debugpanel table { border-collapse: collapse; width: 100%; }
 .debugpanel td { padding: 0 0 0 8px; color: var(--text); vertical-align: top; }
-.debugpanel td:first-child { padding: 0; color: var(--dim); white-space: pre; }
+/* --mute, not --dim: this sits on --panel, where --dim reads 4.39:1. It is
+   the only --dim text in the project on a raised ground. */
+.debugpanel td:first-child { padding: 0; color: var(--mute); white-space: pre; }
 .debugpanel td.bad { color: var(--flare); }
 
 /* =========================================================== landing page ==
@@ -535,8 +548,7 @@ table.tracks td a:hover { text-decoration: underline; }
 .herosection {
   margin: 0;
   padding: 0 0 4px;
-  /* --mute, not --dim: --dim is 3.19:1 on the ground and this is text. */
-  color: var(--mute);
+  color: var(--dim);
   font-size: var(--t-micro);
   letter-spacing: 0.08em;
   min-height: 1.3em;
@@ -597,10 +609,10 @@ audio:not([controls]) { display: none; }
 .cardart { display: block; width: 100%; height: 190px; }
 
 /* Labels live around the canvas, never in it. */
-.cardlabel {
+.card p.cardlabel {
   margin: 0;
   padding: 12px 18px 6px;
-  color: var(--mute);
+  color: var(--dim);
   font-size: var(--t-micro);
   letter-spacing: 0.06em;
   min-height: 1.4em;
@@ -611,7 +623,7 @@ audio:not([controls]) { display: none; }
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
 }
-.stagerow span { color: var(--mute); text-align: center; }
+.stagerow span { color: var(--dim); text-align: center; }
 .stagerow span[data-active="true"] { color: var(--flare); }
 .partswrap { display: grid; grid-template-columns: 4.4rem 1fr; align-items: stretch; }
 .lanelabels {
