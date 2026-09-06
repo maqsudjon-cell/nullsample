@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rate — Nullsample</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#08090C">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="rate">
+
+<main id="app">
+  <div class="rate-top">
+    <span id="progress" class="rate-progress">—</span>
+    <span id="queue" class="rate-queue" hidden></span>
+  </div>
+
+  <canvas id="wave" class="rate-wave" width="720" height="150" aria-hidden="true"></canvas>
+
+  <div id="gate" class="rate-gate">
+    <p class="rate-gate-line">Earbuds, not the phone speaker.</p>
+    <button id="start" class="rate-start" type="button">Begin</button>
+  </div>
+
+  <form id="axes" class="rate-axes" hidden>
+    <fieldset data-axis="hook">
+      <legend>Can you hum it?</legend>
+      <div class="rate-row" role="group" aria-label="Can you hum it?"></div>
+    </fieldset>
+    <fieldset data-axis="punch">
+      <legend>Do the drums cut through?</legend>
+      <div class="rate-row" role="group" aria-label="Do the drums cut through?"></div>
+    </fieldset>
+    <fieldset data-axis="space">
+      <legend>Can you hear sub, lead and kick separately?</legend>
+      <div class="rate-row" role="group" aria-label="Can you hear sub, lead and kick separately?"></div>
+    </fieldset>
+    <fieldset data-axis="interest">
+      <legend>Does it hold?</legend>
+      <div class="rate-row" role="group" aria-label="Does it hold?"></div>
+    </fieldset>
+    <button id="skip" class="rate-skip" type="button">Skip this one</button>
+  </form>
+
+  <p id="reveal" class="rate-reveal" aria-live="polite"></p>
+
+  <section id="key" class="rate-key" hidden>
+    <label for="keyin">Sync key</label>
+    <input id="keyin" type="password" autocomplete="off" spellcheck="false" inputmode="text">
+    <button id="keysave" type="button">Save</button>
+    <p class="rate-key-note">Stored on this device only, sent as a request header.</p>
+  </section>
+
+  <p id="done" class="rate-done" hidden></p>
+  <p class="rate-foot"><a href="/rate/progress/">progress</a></p>
+</main>
+
+<script type="module" src="/rate/rate.js"></script>
+</body>
+</html>

@@ -57,8 +57,45 @@ export class ParamSampler {
     return v;
   }
 
+  /** Smallest weight the sampler will honour, so no region is ever unreachable. */
+  static readonly WEIGHT_FLOOR = 0.02;
+
+  /**
+   * Picks a sub-range by weight, then samples inside it.
+   *
+   * The buckets are equal-width across [min,max]; the weight curve says how
+   * often each is drawn. A zero or missing weight is treated as the floor, not
+   * as an exclusion - see RangeSpec.weights.
+   */
+  private weightedBounds(spec: RangeSpec, weights: readonly number[]): { lo: number; hi: number } {
+    const n = weights.length;
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const w = weights[i];
+      total += w > ParamSampler.WEIGHT_FLOOR ? w : ParamSampler.WEIGHT_FLOOR;
+    }
+    let r = this.rng.float() * total;
+    let idx = n - 1;
+    for (let i = 0; i < n; i++) {
+      const w = weights[i] > ParamSampler.WEIGHT_FLOOR ? weights[i] : ParamSampler.WEIGHT_FLOOR;
+      r -= w;
+      if (r < 0) {
+        idx = i;
+        break;
+      }
+    }
+    const width = (spec.max - spec.min) / n;
+    return { lo: spec.min + idx * width, hi: spec.min + (idx + 1) * width };
+  }
+
   private sampleRange(spec: RangeSpec): number {
     const dist = spec.dist ?? "uniform";
+    if (spec.weights && spec.weights.length > 1) {
+      const { lo, hi } = this.weightedBounds(spec, spec.weights);
+      let v = this.rng.range(lo, hi);
+      if (spec.step && spec.step > 0) v = Math.round(v / spec.step) * spec.step;
+      return v;
+    }
     let v: number;
     if (dist === "log") {
       const lo = dlog(spec.min <= 0 ? 1e-6 : spec.min);

@@ -26,7 +26,11 @@
     "build:all": "npm run brand && npm run tracks && npm run demos && npm run cards && npm run build",
     "serve": "node tools/serve.mjs",
     "demos": "node cli/demos.ts && bash tools/encode-demos.sh",
-    "cards": "node cli/cards.ts && bash tools/encode-demos.sh"
+    "cards": "node cli/cards.ts && bash tools/encode-demos.sh",
+    "audit": "node cli/audit.ts",
+    "effects": "node cli/effects.ts",
+    "masking": "node cli/masking.ts",
+    "tune": "node cli/tune.ts"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

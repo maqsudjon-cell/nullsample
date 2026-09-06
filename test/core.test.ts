@@ -377,10 +377,10 @@ test("shape: saturators are bounded, odd and unity-slope at zero", () => {
   assert.equal(hardClip(2, 0.5), 0.5);
   assert.equal(hardClip(-2, 0.5), -0.5);
   assert.equal(hardClip(0.1, 0.5), 0.1);
-  for (const x of [-3, -1, 0, 1, 3]) assert.ok(Number.isFinite(waveshape(x, 0.5, 0.1, waveshapeOffset(0.1))));
+  for (const x of [-3, -1, 0, 1, 3]) assert.ok(Number.isFinite(waveshape(x, 0.5, 0.1, waveshapeOffset(0.5, 0.1))));
   // zero in must give zero out at every bias, or the shaper emits DC
   for (const bias of [0, 0.05, 0.18, -0.1]) {
-    const y = waveshape(0, 0.4, bias, waveshapeOffset(bias));
+    const y = waveshape(0, 0.4, bias, waveshapeOffset(0.4, bias));
     assert.ok(Math.abs(y) < 1e-15, `waveshape(0) with bias ${bias} returned ${y}`);
   }
 });

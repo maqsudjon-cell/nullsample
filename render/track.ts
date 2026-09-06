@@ -24,9 +24,11 @@ import { StereoDelay } from "../core/delay.ts";
 import type { BusName } from "../compose/arrange.ts";
 import type { Preset, RangesFile } from "../presets/types.ts";
 import type { WordValues } from "../presets/sampler.ts";
+import { DROP_INTENSITY } from "../compose/arrange.ts";
 import { buildPlan, type TrackPlan } from "./plan.ts";
 import { ArpBus, Bass808Bus, DrumsBus, FxBus, LeadBus, PadsBus } from "./voices.ts";
 import { MasterChain, MASTER_FLUSH_SAMPLES } from "./master.ts";
+import { MixTransitions, delayThrowGain } from "./transitions.ts";
 import { Ducker } from "./duck.ts";
 
 export interface RenderOptions {
@@ -85,12 +87,14 @@ export class TrackRenderer {
   private delayReturn: number;
   private master: MasterChain;
   private ducker: Ducker;
+  private transitions: MixTransitions;
 
   private busL: Float32Array;
   private busR: Float32Array;
   private revSend: Float32Array;
   private dlySend: Float32Array;
   private duckBuf: Float32Array;
+  private throwBuf: Float32Array;
   private frame = new Float64Array(2);
 
   private cursor = 0;
@@ -137,6 +141,11 @@ export class TrackRenderer {
     this.revSend = new Float32Array(chunk);
     this.dlySend = new Float32Array(chunk);
     this.duckBuf = new Float32Array(chunk);
+    this.throwBuf = new Float32Array(chunk);
+    // The probe renders the same buses to measure drive; transitions are
+    // transients and must not move that measurement, so they live here on the
+    // pre-master sum rather than on any bus.
+    this.transitions = new MixTransitions(opts.onlyBus ? [] : plan.mixEffects, sampleRate);
 
     const measured = opts.onlyBus ? plan.master.driveTargetDb : measureDrive(plan, sampleRate);
     this.measuredDriveDb = measured;
@@ -183,6 +192,13 @@ export class TrackRenderer {
     revSend.fill(0, 0, count);
     dlySend.fill(0, 0, count);
     for (let i = 0; i < count; i++) duckBuf[i] = this.ducker.step(start + i);
+    const throwBuf = this.throwBuf;
+    const throws = this.plan.delayThrows;
+    if (throws.length > 0) {
+      for (let i = 0; i < count; i++) throwBuf[i] = delayThrowGain(throws, start + i);
+    } else {
+      throwBuf.fill(0, 0, count);
+    }
 
     for (const w of this.wiring) {
       busL.fill(0, 0, count);
@@ -202,7 +218,8 @@ export class TrackRenderer {
         L[i] += l;
         R[i] += r;
         if (w.reverbSend > 0) revSend[i] += (l + r) * 0.5 * w.reverbSend;
-        if (w.delaySend > 0) dlySend[i] += (l + r) * 0.5 * w.delaySend;
+        const send = w.name === "lead" ? w.delaySend + throwBuf[i] : w.delaySend;
+        if (send > 0) dlySend[i] += (l + r) * 0.5 * send;
       }
       this.busPeaks[w.name] = peak;
     }
@@ -230,6 +247,7 @@ export class TrackRenderer {
       }
     }
 
+    this.transitions.process(L, R, start, count);
     this.master.process(L, R, count, start);
     this.cursor = start + count;
     return count;
@@ -332,8 +350,12 @@ const PROBE_WINDOW_SECONDS = 3;
  * gain is a single multiply, so it is deterministic whatever the probe saw.
  */
 function measureDrive(plan: TrackPlan, sampleRate: number): number {
-  const loud = plan.sections.filter((s) => s.intensity >= 0.9);
-  const section = loud.length > 0 ? loud[0] : plan.sections[plan.sections.length - 1];
+  const loud = plan.sections.filter((s) => s.intensity >= DROP_INTENSITY);
+  // Falling back to the last section would measure the outro and drive the
+  // whole track to the outro's level. The loudest section is the fallback.
+  let hottest = plan.sections[0];
+  for (const s of plan.sections) if (s.intensity > hottest.intensity) hottest = s;
+  const section = loud.length > 0 ? loud[0] : hottest;
   if (!section) return -20;
 
   const warm = Math.round(PROBE_WARMUP_SECONDS * sampleRate);

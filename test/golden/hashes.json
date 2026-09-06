@@ -1,31 +1,31 @@
 {
   "preset": "hyperpop",
-  "rangesVersion": 1,
+  "rangesVersion": 3,
   "sampleRate": 44100,
   "tracks": {
     "7": {
-      "sha256": "483a1e8dc414debe9399c1be9515da1ee83217363ac2d11a484e89cd86f93b9a",
+      "sha256": "0a27cf2f5a0a71714f04d100628fd8cf5ac895034f5e47eac70ad2e6b1a02ea2",
       "bytes": 20431156,
       "bars": 72,
       "tempo": 152.5,
-      "peakDb": -1.4582,
-      "rmsDb": -11.8309
+      "peakDb": -1.1827,
+      "rmsDb": -11.9659
     },
     "12345": {
-      "sha256": "7c63b31b2bf5d6c2101825bd6724956792298e4cb06524ae2298f15c4b4e4c67",
-      "bytes": 21893332,
-      "bars": 76,
+      "sha256": "20bf9651a0dd2182a3ce51bff19086494306badb068c376fa169c74df52c5019",
+      "bytes": 20764372,
+      "bars": 72,
       "tempo": 150,
-      "peakDb": -1.0974,
-      "rmsDb": -9.2327
+      "peakDb": -1.0953,
+      "rmsDb": -9.4932
     },
     "hello": {
-      "sha256": "605c4aad3bfce149888b97524f3c2f7ca6551c83ac2521d534547b2bc7e0c1f0",
+      "sha256": "a46952ede9f7335216fcb98d8e10ffea51ead93c91ead142050e5f1af9cb8c04",
       "bytes": 20696980,
       "bars": 72,
       "tempo": 150.5,
-      "peakDb": -1.6006,
-      "rmsDb": -12.0225
+      "peakDb": -1.0702,
+      "rmsDb": -10.9791
     }
   }
 }

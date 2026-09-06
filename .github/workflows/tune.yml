@@ -1,0 +1,79 @@
+# The closed loop, step 3.
+#
+# The phone rates; the Worker collects; when it holds enough new ratings it
+# fires a repository_dispatch here. This pulls the ratings, applies the
+# Addendum 9 rules, renders a new batch, publishes it, and commits the weights
+# with the evidence that produced them.
+#
+# Deliberately modest: one batch per cycle, triggered by ratings, never a
+# continuous job. If a cycle stops fitting in the runner, move rendering to a
+# machine the human controls rather than scaling this up.
+name: tune
+
+on:
+  repository_dispatch:
+    types: [ratings-ready]
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "report only, change nothing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: tune
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install lame
+        run: sudo apt-get update && sudo apt-get install -y lame
+
+      - name: Determinism suite
+        # U4's first guard rail. A cycle never runs on an engine that has
+        # stopped being reproducible.
+        run: npm test
+
+      - name: Run one tuning cycle
+        env:
+          NULLSAMPLE_RATE_KEY: ${{ secrets.RATE_SECRET }}
+        run: |
+          npm run batch -- --count 50 --base c$(date +%s) --out ./batch
+          npm run tune -- ./batch ${{ inputs.dry && '--dry' || '' }}
+
+      - name: Render and publish the next batch
+        if: ${{ !inputs.dry }}
+        run: |
+          npm run batch -- --count 50 --base n$(date +%s) --out ./batch-next --publish
+
+      - name: Commit the cycle
+        if: ${{ !inputs.dry }}
+        run: |
+          git config user.name "nullsample-tuner"
+          git config user.email "noreply@users.noreply.github.com"
+          # Each new batch REPLACES the last: the audio is regenerable from the
+          # seeds, and accumulating 35 MB of MP3 per cycle would bloat the repo
+          # within a fortnight.
+          git add -A presets web/rate/tuning.json web/rate/batch
+          if git diff --cached --quiet; then
+            echo "nothing changed this cycle"
+          else
+            git commit -m "tune: cycle from ${{ github.event.client_payload.batchId || 'manual run' }}
+
+          Weights only; ranges unchanged. Evidence in web/rate/tuning.json.
+
+          Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+            git push
+          fi

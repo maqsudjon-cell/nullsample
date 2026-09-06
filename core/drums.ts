@@ -228,8 +228,27 @@ export function renderRim(sr: number, p: RimParams, rng: Rng): Float32Array {
     out[i] = (band.bandpass(src) + band2.bandpass(src) * 0.4) * amp;
     amp *= k;
   }
+  // A bandpass excited by a unit impulse peaks far below unity, and how far
+  // depends on Q and centre frequency. Left unnormalised, `drums.rim.gainDb`
+  // meant something different from every other voice's gain: a 20 dB swing on
+  // it moved the mix by 0.06 dB, because the source was already 40 dB down.
+  // Normalising to unity peak makes the gain comparable across voices and the
+  // five rim parameters worth tuning.
+  normalisePeak(out);
   fadeTail(out, Math.floor(0.002 * sr));
   return out;
+}
+
+/** Scales a rendered voice so its loudest sample is 1. Silence is left alone. */
+function normalisePeak(buf: Float32Array): void {
+  let peak = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const a = buf[i] < 0 ? -buf[i] : buf[i];
+    if (a > peak) peak = a;
+  }
+  if (peak <= 1e-9) return;
+  const g = 1 / peak;
+  for (let i = 0; i < buf.length; i++) buf[i] *= g;
 }
 
 export interface TomParams {

@@ -1,7 +1,7 @@
 {
   "preset": "hyperpop",
-  "version": 1,
-  "note": "Untuned v1 ranges. These are starting brackets, deliberately wide. Narrow them with `npm run narrow` against real ratings; do not hand-guess them. master.driveTargetDb is the loudness control: the mix is measured at its loudest section and driven to exactly that short-term RMS before the master chain, so every stage downstream has a known operating point and every seed gets the amount of gain IT needs rather than the same amount. bass.bias is deliberately near zero: asymmetric shaping on a 40 Hz sub produces DC that a blocker cannot remove without eating the fundamental, so even harmonics on the 808 come from drive and fold instead.",
+  "version": 3,
+  "note": "Untuned v1 ranges. These are starting brackets, deliberately wide. Narrow them with `npm run narrow` against real ratings; do not hand-guess them. master.driveTargetDb is the loudness control: the mix is measured at its loudest section and driven to exactly that short-term RMS before the master chain, so every stage downstream has a known operating point and every seed gets the amount of gain IT needs rather than the same amount. bass.bias is deliberately near zero: asymmetric shaping on a 40 Hz sub produces DC that a blocker cannot remove without eating the fundamental, so even harmonics on the 808 come from drive and fold instead. bass.octave defaults to -1: that is the 808's register (31-55 Hz fundamental). 0 puts the fundamental at 62-110 Hz, which is a bass guitar, and is kept reachable but rare. master.satDrive is deliberately NOT widened: the saturator's makeup, 1/(1+(drive-1)*0.8), compensates the small-signal gain and is blind to what the saturation does to peaks, so above about 1.5 it removes 5 dB of peak the chain never gets back and the master stops reaching its ceiling. Widening it needs a peak-referenced makeup first.",
   "license": "See presets/LICENSE-PRESETS.md. Tuned range files are the commercial asset and are licensed separately from the engine.",
   "params": {
     "tempo": {
@@ -15,16 +15,16 @@
       "step": 1
     },
     "duck.depth": {
-      "min": 0.4,
-      "max": 0.6
+      "min": 0.25,
+      "max": 0.95
     },
     "duck.attack": {
-      "min": 0.002,
-      "max": 0.008
+      "min": 0.0005,
+      "max": 0.02
     },
     "duck.release": {
-      "min": 0.06,
-      "max": 0.14
+      "min": 0.03,
+      "max": 0.28
     },
     "drums.kick.startHz": {
       "min": 130,
@@ -45,36 +45,36 @@
       "max": 0.58
     },
     "drums.kick.clickLevel": {
-      "min": 0.12,
-      "max": 0.52
+      "min": 0.0,
+      "max": 1.4
     },
     "drums.kick.clickDecay": {
-      "min": 0.003,
-      "max": 0.01
+      "min": 0.001,
+      "max": 0.03
     },
     "drums.kick.drive": {
-      "min": 1.3,
-      "max": 2.9
+      "min": 1.0,
+      "max": 4.0
     },
     "drums.kick.gainDb": {
       "min": -1.5,
       "max": 2.5
     },
     "drums.snare.toneHz": {
-      "min": 165,
-      "max": 235
+      "min": 130,
+      "max": 320
     },
     "drums.snare.toneDecay": {
       "min": 0.05,
       "max": 0.13
     },
     "drums.snare.noiseDecay": {
-      "min": 0.09,
-      "max": 0.24
+      "min": 0.04,
+      "max": 0.42
     },
     "drums.snare.noiseLowHz": {
-      "min": 600,
-      "max": 1400,
+      "min": 300,
+      "max": 2600,
       "dist": "log"
     },
     "drums.snare.noiseHighHz": {
@@ -83,75 +83,75 @@
       "dist": "log"
     },
     "drums.snare.noiseLevel": {
-      "min": 0.45,
-      "max": 0.85
+      "min": 0.2,
+      "max": 1.0
     },
     "drums.snare.toneLevel": {
       "min": 0.25,
       "max": 0.65
     },
     "drums.snare.drive": {
-      "min": 1.2,
-      "max": 2.4
+      "min": 1.0,
+      "max": 4.5
     },
     "drums.snare.gainDb": {
       "min": -4.0,
       "max": 1.0
     },
     "drums.clap.bursts": {
-      "min": 3,
-      "max": 5,
+      "min": 2,
+      "max": 7,
       "step": 1
     },
     "drums.clap.spacing": {
-      "min": 0.008,
-      "max": 0.016
+      "min": 0.004,
+      "max": 0.03
     },
     "drums.clap.spread": {
-      "min": 0.08,
-      "max": 0.3
+      "min": 0.02,
+      "max": 0.6
     },
     "drums.clap.bandLowHz": {
-      "min": 800,
-      "max": 1600,
+      "min": 500,
+      "max": 2600,
       "dist": "log"
     },
     "drums.clap.bandHighHz": {
-      "min": 3000,
-      "max": 6000,
+      "min": 2200,
+      "max": 9000,
       "dist": "log"
     },
     "drums.clap.burstDecay": {
-      "min": 0.008,
-      "max": 0.02
+      "min": 0.004,
+      "max": 0.045
     },
     "drums.clap.tailDecay": {
-      "min": 0.08,
-      "max": 0.22
+      "min": 0.04,
+      "max": 0.4
     },
     "drums.clap.tailLevel": {
-      "min": 0.25,
-      "max": 0.6
+      "min": 0.05,
+      "max": 0.9
     },
     "drums.clap.gainDb": {
-      "min": -5.0,
-      "max": 0.5
+      "min": -9,
+      "max": 3
     },
     "drums.hat.closedDecay": {
-      "min": 0.018,
-      "max": 0.06
+      "min": 0.008,
+      "max": 0.11
     },
     "drums.hat.openDecay": {
-      "min": 0.15,
-      "max": 0.45
+      "min": 0.08,
+      "max": 0.8
     },
     "drums.hat.baseHz": {
-      "min": 34,
-      "max": 52
+      "min": 26,
+      "max": 90
     },
     "drums.hat.highpassHz": {
-      "min": 5800,
-      "max": 9500,
+      "min": 3500,
+      "max": 12000,
       "dist": "log"
     },
     "drums.hat.bandHz": {
@@ -160,53 +160,32 @@
       "dist": "log"
     },
     "drums.hat.bandQ": {
-      "min": 1.0,
-      "max": 2.4
+      "min": 0.6,
+      "max": 6.0
     },
     "drums.hat.noiseMix": {
-      "min": 0.15,
-      "max": 0.6
+      "min": 0.0,
+      "max": 1.0
     },
     "drums.hat.gainDb": {
       "min": -12.0,
       "max": -4.0
     },
     "drums.hat.pan": {
-      "min": 0.05,
-      "max": 0.35
-    },
-    "drums.rim.hz": {
-      "min": 1300,
-      "max": 2200,
-      "dist": "log"
-    },
-    "drums.rim.q": {
-      "min": 6,
-      "max": 14
-    },
-    "drums.rim.decay": {
-      "min": 0.03,
-      "max": 0.08
-    },
-    "drums.rim.clickLevel": {
-      "min": 0.3,
-      "max": 0.8
-    },
-    "drums.rim.gainDb": {
-      "min": -14.0,
-      "max": -6.0
+      "min": 0.0,
+      "max": 0.7
     },
     "drums.humanise": {
-      "min": 0.02,
-      "max": 0.11
+      "min": 0.0,
+      "max": 0.22
     },
     "drums.rollChance": {
-      "min": 0.1,
-      "max": 0.55
+      "min": 0.0,
+      "max": 0.9
     },
     "drums.busDrive": {
       "min": 1.0,
-      "max": 1.9
+      "max": 3.2
     },
     "drums.gainDb": {
       "min": -3.0,
@@ -226,20 +205,20 @@
       "dist": "log"
     },
     "bass.attack": {
-      "min": 0.002,
-      "max": 0.008
+      "min": 0.001,
+      "max": 0.02
     },
     "bass.drive": {
-      "min": 1.6,
-      "max": 4.2
+      "min": 1.2,
+      "max": 9.0
     },
     "bass.subLevel": {
       "min": 0.32,
       "max": 0.72
     },
     "bass.toneHz": {
-      "min": 1200,
-      "max": 4500,
+      "min": 400,
+      "max": 6000,
       "dist": "log"
     },
     "bass.portamento": {
@@ -247,13 +226,17 @@
       "max": 0.075
     },
     "bass.octave": {
-      "min": -1,
-      "max": 0,
-      "step": 1
+      "min": -1.0,
+      "max": 0.0,
+      "step": 1,
+      "weights": [
+        4,
+        1
+      ]
     },
     "bass.distDrive": {
-      "min": 1.2,
-      "max": 3.4
+      "min": 1.0,
+      "max": 5.0
     },
     "bass.fold": {
       "min": 0.0,
@@ -261,15 +244,15 @@
     },
     "bass.bias": {
       "min": 0.0,
-      "max": 0.02
+      "max": 0.05
     },
     "bass.ceiling": {
-      "min": 0.72,
+      "min": 0.5,
       "max": 0.96
     },
     "bass.gainDb": {
       "min": -3.0,
-      "max": 2.0
+      "max": 0.0
     },
     "lead.voices": {
       "min": 7,
@@ -277,21 +260,21 @@
       "step": 1
     },
     "lead.detuneCents": {
-      "min": 8,
-      "max": 25
+      "min": 4,
+      "max": 45
     },
     "lead.spread": {
-      "min": 0.4,
-      "max": 0.95
+      "min": 0.15,
+      "max": 1.0
     },
     "lead.attack": {
-      "min": 0.002,
-      "max": 0.02,
+      "min": 0.001,
+      "max": 0.09,
       "dist": "log"
     },
     "lead.decay": {
-      "min": 0.05,
-      "max": 0.32
+      "min": 0.02,
+      "max": 0.7
     },
     "lead.sustain": {
       "min": 0.4,
@@ -302,17 +285,17 @@
       "max": 0.26
     },
     "lead.filterHz": {
-      "min": 1400,
-      "max": 9000,
+      "min": 900,
+      "max": 12000,
       "dist": "log"
     },
     "lead.filterQ": {
-      "min": 0.7,
-      "max": 4.0
+      "min": 0.5,
+      "max": 9.0
     },
     "lead.envAmount": {
       "min": 0.0,
-      "max": 0.75
+      "max": 1.6
     },
     "lead.octave": {
       "min": 0,
@@ -320,17 +303,17 @@
       "step": 1
     },
     "lead.distDrive": {
-      "min": 2.0,
-      "max": 8.0,
+      "min": 1.5,
+      "max": 18.0,
       "dist": "log"
     },
     "lead.fold": {
       "min": 0.0,
-      "max": 0.55
+      "max": 0.9
     },
     "lead.bias": {
       "min": 0.0,
-      "max": 0.18
+      "max": 0.35
     },
     "lead.ceiling": {
       "min": 0.6,
@@ -342,14 +325,14 @@
     },
     "lead.delaySend": {
       "min": 0.0,
-      "max": 0.35
+      "max": 0.8
     },
     "lead.reverbSend": {
-      "min": 0.03,
-      "max": 0.3
+      "min": 0.0,
+      "max": 0.6
     },
     "lead.duckAmount": {
-      "min": 0.5,
+      "min": 0.2,
       "max": 1.0
     },
     "lead.gainDb": {
@@ -357,7 +340,7 @@
       "max": 0.0
     },
     "arp.pulseWidth": {
-      "min": 0.18,
+      "min": 0.08,
       "max": 0.5
     },
     "arp.filterHz": {
@@ -366,8 +349,8 @@
       "dist": "log"
     },
     "arp.filterQ": {
-      "min": 0.7,
-      "max": 3.0
+      "min": 0.5,
+      "max": 7.0
     },
     "arp.decay": {
       "min": 0.04,
@@ -379,19 +362,19 @@
       "step": 1
     },
     "arp.spread": {
-      "min": 0.2,
-      "max": 0.8
+      "min": 0.05,
+      "max": 1.0
     },
     "arp.reverbSend": {
-      "min": 0.05,
-      "max": 0.35
+      "min": 0.0,
+      "max": 0.75
     },
     "arp.delaySend": {
       "min": 0.0,
-      "max": 0.4
+      "max": 0.8
     },
     "arp.duckAmount": {
-      "min": 0.4,
+      "min": 0.1,
       "max": 1.0
     },
     "arp.gainDb": {
@@ -399,8 +382,8 @@
       "max": -5.0
     },
     "pads.attack": {
-      "min": 0.05,
-      "max": 0.6,
+      "min": 0.01,
+      "max": 1.6,
       "dist": "log"
     },
     "pads.release": {
@@ -433,7 +416,7 @@
       "max": 0.55
     },
     "pads.duckAmount": {
-      "min": 0.7,
+      "min": 0.2,
       "max": 1.0
     },
     "pads.gainDb": {
@@ -442,12 +425,12 @@
     },
     "fx.riserLength": {
       "min": 1,
-      "max": 2,
+      "max": 4,
       "step": 1
     },
     "fx.riserStartHz": {
-      "min": 200,
-      "max": 900,
+      "min": 120,
+      "max": 2400,
       "dist": "log"
     },
     "fx.riserEndHz": {
@@ -456,39 +439,39 @@
       "dist": "log"
     },
     "fx.impactLevel": {
-      "min": 0.25,
-      "max": 0.75
+      "min": 0.15,
+      "max": 1.6
     },
     "fx.impactDecay": {
-      "min": 0.4,
-      "max": 1.4
+      "min": 0.25,
+      "max": 2.6
     },
     "fx.reverbSend": {
-      "min": 0.15,
-      "max": 0.55
+      "min": 0.0,
+      "max": 0.9
     },
     "fx.gainDb": {
       "min": -14.0,
       "max": -4.0
     },
     "reverb.decay": {
-      "min": 1.1,
-      "max": 3.2
+      "min": 0.5,
+      "max": 7.0
     },
     "reverb.brightness": {
       "min": 0.28,
       "max": 0.72
     },
     "reverb.size": {
-      "min": 0.7,
-      "max": 1.3
+      "min": 0.5,
+      "max": 1.7
     },
     "reverb.preDelay": {
       "min": 0.01,
       "max": 0.045
     },
     "reverb.duckAmount": {
-      "min": 0.6,
+      "min": 0.2,
       "max": 1.0
     },
     "reverb.returnDb": {
@@ -496,20 +479,20 @@
       "max": -1.0
     },
     "delay.feedback": {
-      "min": 0.22,
-      "max": 0.56
+      "min": 0.05,
+      "max": 0.78
     },
     "delay.damping": {
-      "min": 0.35,
-      "max": 0.8
+      "min": 0.1,
+      "max": 0.95
     },
     "delay.returnDb": {
-      "min": -12.0,
-      "max": -3.0
+      "min": -18,
+      "max": 0
     },
     "master.driveTargetDb": {
-      "min": -9.0,
-      "max": -8.0
+      "min": -9.2,
+      "max": -7.8
     },
     "master.glueThresholdDb": {
       "min": -9.0,
@@ -551,6 +534,27 @@
     "master.widthMid": {
       "min": 0.0,
       "max": 0.012
+    },
+    "lead.pulseWidthCentre": {
+      "min": 0.18,
+      "max": 0.5
+    },
+    "lead.pulseWidthDepth": {
+      "min": 0.0,
+      "max": 0.35
+    },
+    "lead.syncRatio": {
+      "min": 1.0,
+      "max": 4.0
+    },
+    "lead.fmRatio": {
+      "min": 1.0,
+      "max": 4.0,
+      "step": 0.5
+    },
+    "lead.fmIndex": {
+      "min": 0.05,
+      "max": 0.32
     }
   },
   "choices": {
@@ -575,11 +579,35 @@
     "motif.contour": {
       "weights": [
         3,
-        3,
-        1,
         2,
         3,
+        3,
+        2,
+        3,
+        1,
         1
+      ]
+    },
+    "lead.architecture": {
+      "weights": [
+        6,
+        2,
+        2,
+        1
+      ]
+    },
+    "drums.kick.variant": {
+      "weights": [
+        5,
+        3,
+        2
+      ]
+    },
+    "drums.snare.variant": {
+      "weights": [
+        5,
+        3,
+        2
       ]
     }
   }

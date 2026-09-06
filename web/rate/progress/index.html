@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tuning progress — Nullsample</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#08090C">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="rate">
+
+<main id="app">
+  <h1 class="rate-h1">Tuning</h1>
+  <p id="status" class="rate-status">Loading…</p>
+
+  <section class="rate-panel">
+    <h2>Score trend</h2>
+    <canvas id="trend" class="rate-trend" width="720" height="200"></canvas>
+    <p id="legend" class="rate-legend"></p>
+  </section>
+
+  <section class="rate-panel">
+    <h2>Parameters that moved</h2>
+    <ol id="moved" class="rate-list"></ol>
+  </section>
+
+  <section class="rate-panel">
+    <h2>Sessions</h2>
+    <p id="agreement" class="rate-status"></p>
+    <ol id="discards" class="rate-list"></ol>
+  </section>
+
+  <button id="pause" class="rate-start" type="button">Pause new cycles</button>
+  <p class="rate-foot"><a href="/rate/">back to rating</a></p>
+</main>
+
+<script type="module" src="/rate/progress.js"></script>
+</body>
+</html>

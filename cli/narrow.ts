@@ -1,324 +1,199 @@
 /**
- * Range narrowing.
+ * Per-axis correlation and range proposals.
  *
- *   npm run narrow -- ./batch
+ *   npm run narrow                       fetches the current batch from the Worker
+ *   npm run narrow -- ./batch            uses a local ratings.json instead
  *
- * Reads the batch records and the ratings, correlates every sampled parameter
- * against the ratings, and proposes a tightened ranges file plus a readable
- * diff. It never overwrites the ranges file: the proposal is a suggestion for
- * a human to accept, reject or edit.
+ * A single score per track is very little information: fifty tracks against
+ * forty parameters, correlated with one blurred number, and the human has to
+ * answer the hardest possible question fifty times. Four axes give four
+ * independent signals, and each pulls on a different cluster — punch on the
+ * drums and the master, space on reverb, width and distortion, hook on the
+ * motif parameters.
  *
- * The statistics are deliberately conservative. With 50 ratings, most apparent
- * correlations are noise, so a parameter is only narrowed when the effect is
- * large enough to survive a permutation test, and never by more than a third
- * of its width in one pass.
+ * Every proposal says which axis it is optimising, so a change that would buy
+ * punch by killing space can be rejected on sight. It never writes the ranges
+ * file: `tune` does that, under the guard rails in Addendum 9.
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getPreset } from "../presets/index.ts";
-import { num, parseArgs } from "./args.ts";
-import type { BatchIndex } from "./batch.ts";
-
-interface RatingsFile {
-  preset: string;
-  rangesVersion: number;
-  ratings: Record<string, number>;
-}
+import { num, parseArgs, str } from "./args.ts";
+import type { BatchIndex, RateManifest } from "./batch.ts";
+import {
+  AXES, fdrKeep, fetchRatings, judgeSessions, loadLocalRatings, merge, pearson,
+  permutationP, scoresByTrack, survivesSplit, type Axis, type Rating,
+} from "./ratings.ts";
 
 const args = parseArgs(process.argv.slice(2));
 const dir = args.positional[0] ?? "./batch";
-/** how far a range may shrink in one pass, as a fraction of its width */
-const MAX_SHRINK = num(args, "shrink", 0.34);
-/** minimum |r| before a parameter is considered at all */
+const workerUrl = str(args, "worker", "https://nullsample-rate.maqsudjon-polatov.workers.dev");
+const key = str(args, "key", process.env.NULLSAMPLE_RATE_KEY ?? "");
 const MIN_ABS_R = num(args, "minr", 0.18);
-/** per-test permutation threshold, before the false-discovery correction */
 const MAX_P = num(args, "p", 0.1);
-/** false discovery rate the Benjamini-Hochberg step controls at */
 const FDR = num(args, "fdr", 0.1);
+const MAX_SHRINK = num(args, "shrink", 0.34);
 
 const indexPath = join(dir, "batch.json");
-const ratingsPath = join(dir, "ratings.json");
 if (!existsSync(indexPath)) throw new Error(`no batch.json in ${dir} - run npm run batch first`);
-if (!existsSync(ratingsPath)) {
-  console.error(`No ratings.json in ${dir}.`);
-  console.error(`Open ${join(dir, "sheet.html")}, rate the tracks, press "Save ratings.json",`);
-  console.error(`and move the downloaded file into ${dir}.`);
-  process.exit(1);
-}
-
 const index: BatchIndex = JSON.parse(readFileSync(indexPath, "utf8"));
-const ratingsFile: RatingsFile = JSON.parse(readFileSync(ratingsPath, "utf8"));
 const { ranges } = getPreset(index.preset);
 
-if (ratingsFile.rangesVersion !== index.rangesVersion) {
-  console.error(
-    `warning: ratings were made against ranges v${ratingsFile.rangesVersion} but this batch is v${index.rangesVersion}`,
-  );
+const manifestPath = join("web", "rate", "batch", "manifest.json");
+const manifest: RateManifest | undefined = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, "utf8"))
+  : undefined;
+
+// --- collect ratings --------------------------------------------------------
+
+let ratings: Rating[] = loadLocalRatings(join(dir, "ratings.json"));
+if (manifest && key) {
+  try {
+    const remote = await fetchRatings(workerUrl, manifest.batchId, key);
+    ratings = merge(ratings, remote);
+    console.log(`fetched ${remote.length} ratings from the worker`);
+  } catch (e) {
+    console.error(`could not reach the worker (${(e as Error).message}); using local ratings only`);
+  }
+} else if (!key) {
+  console.error(`no sync key: set NULLSAMPLE_RATE_KEY or pass --key to pull from the worker`);
 }
 
-const rated = index.records
-  .map((r) => ({ record: r, rating: ratingsFile.ratings[r.seed] }))
-  .filter((x): x is { record: (typeof index.records)[0]; rating: number } => typeof x.rating === "number");
-
-if (rated.length < 8) {
-  console.error(`only ${rated.length} tracks rated - rate at least 8 before narrowing`);
+if (ratings.length === 0) {
+  console.error(`no ratings found. Rate at nullsample.maqsudjon.com/rate first.`);
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
+// --- discard bad sessions, whole ------------------------------------------
 
-function pearson(xs: number[], ys: number[]): number {
-  const n = xs.length;
-  let mx = 0;
-  let my = 0;
-  for (let i = 0; i < n; i++) {
-    mx += xs[i];
-    my += ys[i];
+const repeatOf = new Map<string, string>();
+for (const t of manifest?.tracks ?? []) if (t.repeatOf) repeatOf.set(t.id, t.repeatOf);
+const verdicts = judgeSessions(ratings, repeatOf);
+const dropped = new Set(verdicts.filter((v) => !v.kept).map((v) => v.session));
+if (dropped.size > 0) {
+  console.log(`\ndiscarded ${dropped.size} session(s):`);
+  for (const v of verdicts.filter((x) => !x.kept)) {
+    console.log(`  ${v.session}  ${v.reason}`);
   }
-  mx /= n;
-  my /= n;
-  let sxy = 0;
-  let sxx = 0;
-  let syy = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i] - mx;
-    const dy = ys[i] - my;
-    sxy += dx * dy;
-    sxx += dx * dx;
-    syy += dy * dy;
-  }
-  if (sxx <= 0 || syy <= 0) return 0;
-  return sxy / Math.sqrt(sxx * syy);
+}
+const kept = ratings.filter((r) => !dropped.has(r.session));
+
+// --- map ratings back onto rendered parameter values -----------------------
+
+const seedOf = new Map<string, string>();
+for (const t of manifest?.tracks ?? []) seedOf.set(t.id, t.seed);
+const bySeed = new Map(index.records.map((r) => [r.seed, r]));
+const trackScores = scoresByTrack(kept);
+
+interface Row { seed: string; params: Record<string, number>; scores: Partial<Record<Axis, number>> }
+const rows: Row[] = [];
+for (const [trackId, scores] of trackScores) {
+  const seed = seedOf.get(trackId) ?? trackId;
+  const rec = bySeed.get(seed);
+  if (!rec) continue;
+  rows.push({ seed, params: rec.params, scores });
 }
 
-/**
- * Permutation test. Shuffles the ratings many times and counts how often
- * chance produces a correlation at least this strong. Deterministic: the
- * shuffle uses a fixed seed, so re-running narrow on the same data gives the
- * same proposal.
- */
-function permutationP(xs: number[], ys: number[], observed: number): number {
-  let state = 0x2f6e2b1 >>> 0;
-  const rnd = () => {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state >>>= 0;
-    return state / 4294967296;
-  };
-  const shuffled = [...ys];
-  const target = Math.abs(observed);
-  let hits = 0;
-  const trials = 2000;
-  for (let t = 0; t < trials; t++) {
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      const tmp = shuffled[i];
-      shuffled[i] = shuffled[j];
-      shuffled[j] = tmp;
-    }
-    if (Math.abs(pearson(xs, shuffled)) >= target) hits++;
-  }
-  return hits / trials;
+if (rows.length < 8) {
+  console.error(`only ${rows.length} rated tracks matched this batch - rate at least 8`);
+  process.exit(1);
 }
 
-function quantile(sorted: number[], q: number): number {
-  if (sorted.length === 1) return sorted[0];
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
-
-// ---------------------------------------------------------------------------
+// --- per-axis correlation ---------------------------------------------------
 
 interface Finding {
-  key: string;
-  r: number;
-  p: number;
-  /** true once the finding survives the false-discovery correction */
-  kept?: boolean;
-  oldMin: number;
-  oldMax: number;
-  newMin: number;
-  newMax: number;
-  goodMean: number;
-  badMean: number;
-  n: number;
+  key: string; axis: Axis; r: number; p: number; n: number;
+  goodMean: number; badMean: number; split: boolean;
+  oldMin: number; oldMax: number; newMin: number; newMax: number;
 }
 
 const paramKeys = Object.keys(ranges.params);
-const ys = rated.map((x) => x.rating);
 const findings: Finding[] = [];
-const skipped: string[] = [];
 
-for (const key of paramKeys) {
-  const spec = ranges.params[key];
-  const xs = rated.map((x) => x.record.params[key]);
-  if (xs.some((v) => typeof v !== "number")) {
-    skipped.push(key);
-    continue;
+for (const axis of AXES) {
+  const withAxis = rows.filter((r) => typeof r.scores[axis] === "number");
+  if (withAxis.length < 8) continue;
+  const ys = withAxis.map((r) => r.scores[axis] as number);
+  const candidates: Finding[] = [];
+  const ps: number[] = [];
+
+  for (const k of paramKeys) {
+    const xs = withAxis.map((r) => r.params[k]);
+    if (xs.some((v) => typeof v !== "number")) continue;
+    if (Math.max(...xs) - Math.min(...xs) <= 0) continue;
+    const r = pearson(xs, ys);
+    if (Math.abs(r) < MIN_ABS_R) continue;
+    const p = permutationP(xs, ys, r);
+    if (p > MAX_P) continue;
+
+    const spec = ranges.params[k];
+    const good = withAxis.filter((_, i) => ys[i] >= 4).map((x) => x.params[k]);
+    const bad = withAxis.filter((_, i) => ys[i] <= 2).map((x) => x.params[k]);
+    const gm = good.length > 0 ? good.reduce((s, v) => s + v, 0) / good.length : NaN;
+    const bm = bad.length > 0 ? bad.reduce((s, v) => s + v, 0) / bad.length : NaN;
+
+    // A proposal only, and never more than a third of the width in one pass.
+    const width = spec.max - spec.min;
+    const shift = Math.sign(r) * MAX_SHRINK * width * 0.5;
+    const newMin = Math.max(spec.min, spec.min + Math.max(0, shift));
+    const newMax = Math.min(spec.max, spec.max + Math.min(0, shift));
+
+    candidates.push({
+      key: k, axis, r, p, n: withAxis.length,
+      goodMean: gm, badMean: bm,
+      split: survivesSplit(xs, ys),
+      oldMin: spec.min, oldMax: spec.max, newMin, newMax,
+    });
+    ps.push(p);
   }
-  const spread = Math.max(...xs) - Math.min(...xs);
-  if (spread <= 0) {
-    skipped.push(key);
-    continue;
-  }
 
-  const r = pearson(xs, ys);
-  if (Math.abs(r) < MIN_ABS_R) continue;
-  const p = permutationP(xs, ys, r);
-  if (p > MAX_P) continue;
-
-  // where the well-rated renders actually sat
-  const good = rated
-    .filter((x) => x.rating >= 4)
-    .map((x) => x.record.params[key])
-    .sort((a, b) => a - b);
-  const bad = rated.filter((x) => x.rating <= 2).map((x) => x.record.params[key]);
-  if (good.length < 3) continue;
-
-  const gLo = quantile(good, 0.1);
-  const gHi = quantile(good, 0.9);
-  const width = spec.max - spec.min;
-  const minWidth = width * (1 - MAX_SHRINK);
-
-  let newMin = gLo;
-  let newMax = gHi;
-  if (newMax - newMin < minWidth) {
-    const centre = (newMin + newMax) / 2;
-    newMin = centre - minWidth / 2;
-    newMax = centre + minWidth / 2;
-  }
-  // never step outside the original bracket
-  newMin = Math.max(spec.min, newMin);
-  newMax = Math.min(spec.max, newMax);
-  if (newMax <= newMin) continue;
-
-  const mean = (a: number[]) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN);
-  findings.push({
-    key, r, p,
-    oldMin: spec.min, oldMax: spec.max,
-    newMin, newMax,
-    goodMean: mean(good), badMean: mean(bad),
-    n: rated.length,
-  });
+  const keepIdx = fdrKeep(ps, FDR);
+  candidates.forEach((c, i) => { if (keepIdx.has(i)) findings.push(c); });
 }
 
-/**
- * Benjamini-Hochberg false discovery rate control.
- *
- * There are well over a hundred parameters. Testing every one at p < 0.1 and
- * reporting whatever clears it produces about thirteen false positives from
- * noise alone - on a real run of 60 ratings with one planted signal, the
- * uncorrected version proposed seventeen parameters when exactly one was real.
- * Narrowing sixteen ranges toward noise is worse than narrowing none, because
- * it bakes the noise into the preset and the next batch inherits it.
- *
- * BH keeps the largest k for which the k-th smallest p is at or below
- * (k/m) * FDR, where m is the number of parameters actually tested.
- */
-function controlFalseDiscovery(all: Finding[], tested: number): Finding[] {
-  const sorted = [...all].sort((a, b) => a.p - b.p);
-  let cutoff = -1;
-  for (let i = 0; i < sorted.length; i++) {
-    if (sorted[i].p <= ((i + 1) / Math.max(1, tested)) * FDR) cutoff = i;
+// --- report ------------------------------------------------------------------
+
+const pad = (s: string, n: number) => (s.length >= n ? s : s + " ".repeat(n - s.length));
+const padL = (s: string, n: number) => (s.length >= n ? s : " ".repeat(n - s.length) + s);
+
+console.log(`\nPER-AXIS CORRELATION — ${index.preset}, ${rows.length} rated tracks, ranges v${index.rangesVersion}\n`);
+const means: Record<string, string> = {};
+for (const axis of AXES) {
+  const vals = rows.map((r) => r.scores[axis]).filter((v): v is number => typeof v === "number");
+  means[axis] = vals.length > 0 ? (vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2) : "-";
+}
+console.log(`mean scores:  ${AXES.map((a) => `${a} ${means[a]}`).join("   ")}`);
+
+for (const axis of AXES) {
+  const set = findings.filter((f) => f.axis === axis).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+  console.log(`\n${axis.toUpperCase()} — ${set.length === 0 ? "nothing cleared the bar" : `${set.length} parameter(s)`}`);
+  if (set.length === 0) continue;
+  console.log(`  ${pad("parameter", 26)}${padL("r", 7)}${padL("p", 7)}${padL("split", 7)}   proposal`);
+  for (const f of set) {
+    const dir = f.r > 0 ? "higher scores better" : "lower scores better";
+    console.log(
+      `  ${pad(f.key, 26)}${padL(f.r.toFixed(2), 7)}${padL(f.p.toFixed(3), 7)}` +
+      `${padL(f.split ? "yes" : "no", 7)}   ${dir}: ${f.oldMin} .. ${f.oldMax} -> ` +
+      `${f.newMin.toFixed(4)} .. ${f.newMax.toFixed(4)}`,
+    );
   }
-  return cutoff < 0 ? [] : sorted.slice(0, cutoff + 1);
 }
 
-const testedCount = paramKeys.length - skipped.length;
-const survived = controlFalseDiscovery(findings, testedCount);
-const rejected = findings.length - survived.length;
-findings.length = 0;
-findings.push(...survived);
-findings.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-
-// --- categorical choices ----------------------------------------------------
-const choiceReport: string[] = [];
-const choiceKeys = new Set<string>();
-for (const x of rated) for (const k of Object.keys(x.record.choices)) choiceKeys.add(k);
-for (const key of [...choiceKeys].sort()) {
-  const byOption = new Map<string, number[]>();
-  for (const x of rated) {
-    const v = x.record.choices[key];
-    if (v === undefined) continue;
-    if (!byOption.has(v)) byOption.set(v, []);
-    byOption.get(v)!.push(x.rating);
-  }
-  const rows = [...byOption.entries()]
-    .map(([opt, rs]) => ({ opt, n: rs.length, mean: rs.reduce((s, v) => s + v, 0) / rs.length }))
-    .filter((x) => x.n >= 2)
-    .sort((a, b) => b.mean - a.mean);
-  if (rows.length < 2) continue;
-  choiceReport.push(
-    `  ${key}\n` +
-      rows.map((x) => `    ${x.mean.toFixed(2)}  n=${String(x.n).padStart(2)}  ${x.opt}`).join("\n"),
-  );
-}
-
-// --- write the proposal -----------------------------------------------------
-const proposal = JSON.parse(JSON.stringify(ranges));
-proposal.version = ranges.version + 1;
-proposal.note =
-  `Proposed by narrow from ${rated.length} ratings over ${index.count} renders ` +
-  `(ranges v${ranges.version}). Review the diff before adopting. Not applied automatically.`;
+const conflicts = new Map<string, Finding[]>();
 for (const f of findings) {
-  proposal.params[f.key].min = Number(f.newMin.toFixed(6));
-  proposal.params[f.key].max = Number(f.newMax.toFixed(6));
+  const l = conflicts.get(f.key) ?? [];
+  l.push(f);
+  conflicts.set(f.key, l);
 }
-
-const proposalPath = join(dir, `${index.preset}.ranges.proposal.json`);
-writeFileSync(proposalPath, JSON.stringify(proposal, null, 2));
-
-// --- readable report --------------------------------------------------------
-const dist = [0, 0, 0, 0, 0];
-for (const y of ys) dist[y - 1]++;
-const meanRating = ys.reduce((s, v) => s + v, 0) / ys.length;
-const poorRate = (dist[0] + dist[1]) / ys.length;
-
-const lines: string[] = [];
-lines.push(`nullsample narrow - ${index.preset}, ranges v${ranges.version} -> v${proposal.version}`);
-lines.push("");
-lines.push(`  ${rated.length} of ${index.count} rated   mean ${meanRating.toFixed(2)}`);
-lines.push(`  distribution  1:${dist[0]}  2:${dist[1]}  3:${dist[2]}  4:${dist[3]}  5:${dist[4]}`);
-lines.push(`  rated poor (1-2): ${(poorRate * 100).toFixed(0)}%   ${poorRate < 0.05 ? "AT TARGET - the preset is done" : "target is under 5%"}`);
-lines.push("");
-lines.push(
-  `  ${testedCount} parameters tested, false discovery rate controlled at ${FDR}` +
-    (rejected > 0 ? `, ${rejected} candidate${rejected === 1 ? "" : "s"} rejected as likely noise` : ""),
-);
-lines.push("");
-if (findings.length === 0) {
-  lines.push("  No parameter survived the false-discovery correction.");
-  lines.push("  That is a real result, not a failure: across this many parameters, nothing");
-  lines.push("  is driving the score by more than chance would explain. Either the ranges");
-  lines.push("  are already reasonable, or the problem is somewhere the ranges cannot");
-  lines.push("  reach - arrangement, note choice, or a bug. Rating more renders is the");
-  lines.push("  only thing that will separate a real effect from noise.");
-} else {
-  lines.push(`  ${findings.length} parameter${findings.length === 1 ? "" : "s"} proposed for narrowing:`);
-  lines.push("");
-  lines.push(`  ${"parameter".padEnd(26)} ${"r".padStart(6)} ${"p".padStart(5)}   ${"from".padStart(19)}  ->  ${"to".padStart(19)}`);
-  for (const f of findings) {
-    const from = `[${f.oldMin.toFixed(3)}, ${f.oldMax.toFixed(3)}]`;
-    const to = `[${f.newMin.toFixed(3)}, ${f.newMax.toFixed(3)}]`;
-    const dir2 = f.r > 0 ? "higher rates better" : "lower rates better";
-    lines.push(`  ${f.key.padEnd(26)} ${f.r.toFixed(2).padStart(6)} ${f.p.toFixed(3).padStart(5)}   ${from.padStart(19)}  ->  ${to.padStart(19)}   ${dir2}`);
+const opposed = [...conflicts].filter(([, fs]) => fs.length > 1 && new Set(fs.map((f) => Math.sign(f.r))).size > 1);
+if (opposed.length > 0) {
+  console.log(`\nTRADE-OFFS — these pull two axes in opposite directions:`);
+  for (const [k, fs] of opposed) {
+    console.log(`  ${pad(k, 26)}${fs.map((f) => `${f.axis} ${f.r > 0 ? "+" : "-"}${Math.abs(f.r).toFixed(2)}`).join("   ")}`);
   }
 }
-if (choiceReport.length > 0) {
-  lines.push("");
-  lines.push("  categorical choices, mean rating by option:");
-  lines.push(...choiceReport);
-}
-lines.push("");
-lines.push(`  proposal written to ${proposalPath}`);
-lines.push(`  to adopt:  cp ${proposalPath} presets/${index.preset}.ranges.json`);
-lines.push("");
 
-const report = lines.join("\n");
-writeFileSync(join(dir, "narrow-report.txt"), report + "\n");
-console.log(report);
+const outPath = join(dir, "proposal.json");
+writeFileSync(outPath, JSON.stringify({ preset: index.preset, rangesVersion: index.rangesVersion, findings }, null, 2));
+console.log(`\nwrote ${outPath} — a proposal, not a change. \`npm run tune\` applies weights under the Addendum 9 guard rails.`);

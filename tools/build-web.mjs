@@ -36,6 +36,10 @@ mkdirSync(join(OUT, "generate"), { recursive: true });
 await bundle("web/app.ts", "generate/app.js");
 await bundle("web/worker.ts", "generate/worker.js");
 await bundle("web/landing.ts", "landing.js");
+// private tooling, noindex, out of the sitemap
+mkdirSync(join(OUT, "rate"), { recursive: true });
+await bundle("web/rate.ts", "rate/rate.js");
+await bundle("web/rate-progress.ts", "rate/progress.js");
 
 /**
  * Minifies CSS and inlines it into every page.
@@ -75,6 +79,19 @@ try {
   console.warn("  demo audio missing - run npm run demos");
 }
 cpSync(join(ROOT, "web/fonts"), join(OUT, "fonts"), { recursive: true });
+page(join(ROOT, "web/rate/index.html"), join(OUT, "rate", "index.html"));
+page(join(ROOT, "web/rate/progress/index.html"), join(OUT, "rate", "progress", "index.html"));
+try {
+  cpSync(join(ROOT, "web/rate/batch"), join(OUT, "rate", "batch"), { recursive: true });
+} catch {
+  console.warn("  no rating batch published - run npm run batch -- --publish");
+}
+try {
+  cpSync(join(ROOT, "web/rate/tuning.json"), join(OUT, "rate", "tuning.json"));
+} catch {
+  /* no cycles have run yet */
+}
+
 for (const name of ["how-it-works", "tracks"]) {
   try {
     page(join(ROOT, "web", name, "index.html"), join(OUT, name, "index.html"));
@@ -93,7 +110,7 @@ writeFileSync(join(OUT, "CNAME"), "nullsample.maqsudjon.com\n");
 
 writeFileSync(
   join(OUT, "robots.txt"),
-  `User-agent: *\nAllow: /\n\nSitemap: ${DOMAIN}/sitemap.xml\n`,
+  `User-agent: *\nAllow: /\nDisallow: /rate/\n\nSitemap: ${DOMAIN}/sitemap.xml\n`,
 );
 
 const today = new Date().toISOString().slice(0, 10);

@@ -12,7 +12,10 @@ import { cents, clamp, db2gain, dsqrt, midiToHz, panGains } from "../core/dmath.
 import { makeRng, type Rng } from "../core/rng.ts";
 import { Adsr, ExpDecay } from "../core/env.ts";
 import { DcBlocker, Svf } from "../core/filter.ts";
-import { Pulse, Saw, Sine, Supersaw, WhiteNoise } from "../core/osc.ts";
+import {
+  FmPair, Pulse, PulseStack, Saw, Sine, Supersaw, SyncSaw, WhiteNoise,
+  type LeadVoice,
+} from "../core/osc.ts";
 import { DistortionChain, softClip } from "../core/shape.ts";
 import { Chorus } from "../core/delay.ts";
 import { FormantVoice, NEUTRAL_FORMANTS } from "../core/formant.ts";
@@ -366,9 +369,34 @@ export class Bass808Bus {
 // lead
 // ---------------------------------------------------------------------------
 
+/**
+ * Builds the lead's oscillator from the architecture the seed drew.
+ *
+ * All four feed the same filter, distortion and effects chain, so what changes
+ * is the instrument rather than the treatment.
+ */
+function buildLeadVoice(plan: TrackPlan, rng: Rng): LeadVoice {
+  const p = plan.lead;
+  switch (p.architecture) {
+    case "pulseStack":
+      return new PulseStack(
+        plan.sampleRate, rng, p.voices, p.detuneCents, p.spread,
+        p.pulseWidthCentre, p.pulseWidthDepth,
+      );
+    case "syncSaw":
+      return new SyncSaw(plan.sampleRate, rng, p.voices, p.detuneCents, p.spread, p.syncRatio);
+    case "fmPair":
+      return new FmPair(
+        plan.sampleRate, rng, p.voices, p.detuneCents, p.spread, p.fmRatio, p.fmIndex,
+      );
+    default:
+      return new Supersaw(plan.sampleRate, rng, p.voices, p.detuneCents, p.spread);
+  }
+}
+
 export class LeadBus {
   private plan: TrackPlan;
-  private saw: Supersaw;
+  private saw: LeadVoice;
   private env: Adsr;
   private filt: Svf;
   private filtRight: Svf;
@@ -391,7 +419,7 @@ export class LeadBus {
     this.plan = plan;
     const p = plan.lead;
     const rng = makeRng(plan.locks["lead"] ?? plan.seed).child("lead").child("voice");
-    this.saw = new Supersaw(plan.sampleRate, rng, p.voices, p.detuneCents, p.spread);
+    this.saw = buildLeadVoice(plan, rng);
     this.env = new Adsr(plan.sampleRate);
     this.env.set(p.attack, p.decay, p.sustain, p.release);
     this.filt = new Svf(plan.sampleRate);
@@ -765,17 +793,25 @@ export class FxBus {
       const abs = start + i;
       let sweep = 0;
       let sweepHz = 0;
-      let reverse = false;
+      let q = 3.2;
       for (const e of overlapping) {
         if (abs < e.start || abs >= e.start + e.length) continue;
         const t = (abs - e.start) / e.length;
         if (e.kind === "riser") {
           sweep = t * t * e.level;
           sweepHz = p.riserStartHz + (p.riserEndHz - p.riserStartHz) * (t * t);
+          q = 3.2;
+        } else if (e.kind === "downlifter") {
+          // the riser run backwards: loudest at the moment the drop ends, then
+          // falling in pitch and level through the section it opens
+          const u = 1 - t;
+          sweep = u * u * e.level;
+          sweepHz = p.riserEndHz * u * u + 70;
+          q = 2.4;
         } else {
           sweep = t * t * t * e.level;
           sweepHz = p.riserEndHz * 0.5;
-          reverse = true;
+          q = 1.2;
         }
       }
 
@@ -784,7 +820,6 @@ export class FxBus {
       if (sweep > 1e-4) {
         // a bandpass has roughly Q times the gain at its centre, so the
         // resonance has to be divided back out or the sweep clips the bus
-        const q = reverse ? 1.2 : 3.2;
         const norm = 0.85 / q;
         this.band.set(clamp(sweepHz, 60, this.plan.sampleRate * 0.45), q);
         this.bandR.set(clamp(sweepHz * 1.03, 60, this.plan.sampleRate * 0.45), q);

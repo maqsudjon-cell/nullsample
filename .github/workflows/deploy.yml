@@ -47,6 +47,31 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Install lame
+        run: sudo apt-get update && sudo apt-get install -y lame
+
+      - name: Rating batch audio
+        # Never committed - see .gitignore. Rebuilt from the ranges snapshot
+        # inside manifest.json, so it is byte-identical to what was rated, and
+        # cached on the batch id so an unrelated push does not re-render it.
+        id: batchid
+        run: |
+          if [ -f web/rate/batch/manifest.json ]; then
+            echo "id=$(node -p "require('./web/rate/batch/manifest.json').batchId")" >> "$GITHUB_OUTPUT"
+          else
+            echo "id=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/cache@v4
+        if: steps.batchid.outputs.id != 'none'
+        with:
+          path: web/rate/batch
+          key: ratebatch-${{ steps.batchid.outputs.id }}
+
+      - name: Rebuild any missing batch audio
+        if: steps.batchid.outputs.id != 'none'
+        run: npm run batch -- --rebuild
+
       - name: brand assets
         run: npm run brand
       - name: tracks page

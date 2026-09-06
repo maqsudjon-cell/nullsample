@@ -1,0 +1,688 @@
+{
+  "batchId": "p-3-6",
+  "preset": "hyperpop",
+  "rangesVersion": 3,
+  "createdAt": "2026-09-06T08:28:43.509Z",
+  "ranges": {
+    "preset": "hyperpop",
+    "version": 3,
+    "note": "Untuned v1 ranges. These are starting brackets, deliberately wide. Narrow them with `npm run narrow` against real ratings; do not hand-guess them. master.driveTargetDb is the loudness control: the mix is measured at its loudest section and driven to exactly that short-term RMS before the master chain, so every stage downstream has a known operating point and every seed gets the amount of gain IT needs rather than the same amount. bass.bias is deliberately near zero: asymmetric shaping on a 40 Hz sub produces DC that a blocker cannot remove without eating the fundamental, so even harmonics on the 808 come from drive and fold instead. bass.octave defaults to -1: that is the 808's register (31-55 Hz fundamental). 0 puts the fundamental at 62-110 Hz, which is a bass guitar, and is kept reachable but rare. master.satDrive is deliberately NOT widened: the saturator's makeup, 1/(1+(drive-1)*0.8), compensates the small-signal gain and is blind to what the saturation does to peaks, so above about 1.5 it removes 5 dB of peak the chain never gets back and the master stops reaching its ceiling. Widening it needs a peak-referenced makeup first.",
+    "license": "See presets/LICENSE-PRESETS.md. Tuned range files are the commercial asset and are licensed separately from the engine.",
+    "params": {
+      "tempo": {
+        "min": 150,
+        "max": 160,
+        "step": 0.5
+      },
+      "barsPerChord": {
+        "min": 1,
+        "max": 2,
+        "step": 1
+      },
+      "duck.depth": {
+        "min": 0.25,
+        "max": 0.95
+      },
+      "duck.attack": {
+        "min": 0.0005,
+        "max": 0.02
+      },
+      "duck.release": {
+        "min": 0.03,
+        "max": 0.28
+      },
+      "drums.kick.startHz": {
+        "min": 130,
+        "max": 240,
+        "dist": "log"
+      },
+      "drums.kick.endHz": {
+        "min": 40,
+        "max": 53
+      },
+      "drums.kick.pitchDecay": {
+        "min": 0.016,
+        "max": 0.045,
+        "dist": "log"
+      },
+      "drums.kick.ampDecay": {
+        "min": 0.26,
+        "max": 0.58
+      },
+      "drums.kick.clickLevel": {
+        "min": 0,
+        "max": 1.4
+      },
+      "drums.kick.clickDecay": {
+        "min": 0.001,
+        "max": 0.03
+      },
+      "drums.kick.drive": {
+        "min": 1,
+        "max": 4
+      },
+      "drums.kick.gainDb": {
+        "min": -1.5,
+        "max": 2.5
+      },
+      "drums.snare.toneHz": {
+        "min": 130,
+        "max": 320
+      },
+      "drums.snare.toneDecay": {
+        "min": 0.05,
+        "max": 0.13
+      },
+      "drums.snare.noiseDecay": {
+        "min": 0.04,
+        "max": 0.42
+      },
+      "drums.snare.noiseLowHz": {
+        "min": 300,
+        "max": 2600,
+        "dist": "log"
+      },
+      "drums.snare.noiseHighHz": {
+        "min": 5500,
+        "max": 11000,
+        "dist": "log"
+      },
+      "drums.snare.noiseLevel": {
+        "min": 0.2,
+        "max": 1
+      },
+      "drums.snare.toneLevel": {
+        "min": 0.25,
+        "max": 0.65
+      },
+      "drums.snare.drive": {
+        "min": 1,
+        "max": 4.5
+      },
+      "drums.snare.gainDb": {
+        "min": -4,
+        "max": 1
+      },
+      "drums.clap.bursts": {
+        "min": 2,
+        "max": 7,
+        "step": 1
+      },
+      "drums.clap.spacing": {
+        "min": 0.004,
+        "max": 0.03
+      },
+      "drums.clap.spread": {
+        "min": 0.02,
+        "max": 0.6
+      },
+      "drums.clap.bandLowHz": {
+        "min": 500,
+        "max": 2600,
+        "dist": "log"
+      },
+      "drums.clap.bandHighHz": {
+        "min": 2200,
+        "max": 9000,
+        "dist": "log"
+      },
+      "drums.clap.burstDecay": {
+        "min": 0.004,
+        "max": 0.045
+      },
+      "drums.clap.tailDecay": {
+        "min": 0.04,
+        "max": 0.4
+      },
+      "drums.clap.tailLevel": {
+        "min": 0.05,
+        "max": 0.9
+      },
+      "drums.clap.gainDb": {
+        "min": -9,
+        "max": 3
+      },
+      "drums.hat.closedDecay": {
+        "min": 0.008,
+        "max": 0.11
+      },
+      "drums.hat.openDecay": {
+        "min": 0.08,
+        "max": 0.8
+      },
+      "drums.hat.baseHz": {
+        "min": 26,
+        "max": 90
+      },
+      "drums.hat.highpassHz": {
+        "min": 3500,
+        "max": 12000,
+        "dist": "log"
+      },
+      "drums.hat.bandHz": {
+        "min": 7500,
+        "max": 12500,
+        "dist": "log"
+      },
+      "drums.hat.bandQ": {
+        "min": 0.6,
+        "max": 6
+      },
+      "drums.hat.noiseMix": {
+        "min": 0,
+        "max": 1
+      },
+      "drums.hat.gainDb": {
+        "min": -12,
+        "max": -4
+      },
+      "drums.hat.pan": {
+        "min": 0,
+        "max": 0.7
+      },
+      "drums.humanise": {
+        "min": 0,
+        "max": 0.22
+      },
+      "drums.rollChance": {
+        "min": 0,
+        "max": 0.9
+      },
+      "drums.busDrive": {
+        "min": 1,
+        "max": 3.2
+      },
+      "drums.gainDb": {
+        "min": -3,
+        "max": 1.5
+      },
+      "bass.dropSemitones": {
+        "min": 5,
+        "max": 12
+      },
+      "bass.dropTime": {
+        "min": 0.04,
+        "max": 0.09
+      },
+      "bass.decay": {
+        "min": 0.45,
+        "max": 1.6,
+        "dist": "log"
+      },
+      "bass.attack": {
+        "min": 0.001,
+        "max": 0.02
+      },
+      "bass.drive": {
+        "min": 1.2,
+        "max": 9
+      },
+      "bass.subLevel": {
+        "min": 0.32,
+        "max": 0.72
+      },
+      "bass.toneHz": {
+        "min": 400,
+        "max": 6000,
+        "dist": "log"
+      },
+      "bass.portamento": {
+        "min": 0.015,
+        "max": 0.075
+      },
+      "bass.octave": {
+        "min": -1,
+        "max": 0,
+        "step": 1,
+        "weights": [
+          4,
+          1
+        ]
+      },
+      "bass.distDrive": {
+        "min": 1,
+        "max": 5
+      },
+      "bass.fold": {
+        "min": 0,
+        "max": 0.35
+      },
+      "bass.bias": {
+        "min": 0,
+        "max": 0.05
+      },
+      "bass.ceiling": {
+        "min": 0.5,
+        "max": 0.96
+      },
+      "bass.gainDb": {
+        "min": -3,
+        "max": 0
+      },
+      "lead.voices": {
+        "min": 7,
+        "max": 9,
+        "step": 1
+      },
+      "lead.detuneCents": {
+        "min": 4,
+        "max": 45
+      },
+      "lead.spread": {
+        "min": 0.15,
+        "max": 1
+      },
+      "lead.attack": {
+        "min": 0.001,
+        "max": 0.09,
+        "dist": "log"
+      },
+      "lead.decay": {
+        "min": 0.02,
+        "max": 0.7
+      },
+      "lead.sustain": {
+        "min": 0.4,
+        "max": 0.88
+      },
+      "lead.release": {
+        "min": 0.04,
+        "max": 0.26
+      },
+      "lead.filterHz": {
+        "min": 900,
+        "max": 12000,
+        "dist": "log"
+      },
+      "lead.filterQ": {
+        "min": 0.5,
+        "max": 9
+      },
+      "lead.envAmount": {
+        "min": 0,
+        "max": 1.6
+      },
+      "lead.octave": {
+        "min": 0,
+        "max": 1,
+        "step": 1
+      },
+      "lead.distDrive": {
+        "min": 1.5,
+        "max": 18,
+        "dist": "log"
+      },
+      "lead.fold": {
+        "min": 0,
+        "max": 0.9
+      },
+      "lead.bias": {
+        "min": 0,
+        "max": 0.35
+      },
+      "lead.ceiling": {
+        "min": 0.6,
+        "max": 0.95
+      },
+      "lead.chorusDepth": {
+        "min": 0,
+        "max": 0.006
+      },
+      "lead.delaySend": {
+        "min": 0,
+        "max": 0.8
+      },
+      "lead.reverbSend": {
+        "min": 0,
+        "max": 0.6
+      },
+      "lead.duckAmount": {
+        "min": 0.2,
+        "max": 1
+      },
+      "lead.gainDb": {
+        "min": -6,
+        "max": 0
+      },
+      "arp.pulseWidth": {
+        "min": 0.08,
+        "max": 0.5
+      },
+      "arp.filterHz": {
+        "min": 1800,
+        "max": 11000,
+        "dist": "log"
+      },
+      "arp.filterQ": {
+        "min": 0.5,
+        "max": 7
+      },
+      "arp.decay": {
+        "min": 0.04,
+        "max": 0.18
+      },
+      "arp.octave": {
+        "min": 1,
+        "max": 2,
+        "step": 1
+      },
+      "arp.spread": {
+        "min": 0.05,
+        "max": 1
+      },
+      "arp.reverbSend": {
+        "min": 0,
+        "max": 0.75
+      },
+      "arp.delaySend": {
+        "min": 0,
+        "max": 0.8
+      },
+      "arp.duckAmount": {
+        "min": 0.1,
+        "max": 1
+      },
+      "arp.gainDb": {
+        "min": -14,
+        "max": -5
+      },
+      "pads.attack": {
+        "min": 0.01,
+        "max": 1.6,
+        "dist": "log"
+      },
+      "pads.release": {
+        "min": 0.3,
+        "max": 1.6
+      },
+      "pads.filterHz": {
+        "min": 600,
+        "max": 4500,
+        "dist": "log"
+      },
+      "pads.filterQ": {
+        "min": 0.6,
+        "max": 1.8
+      },
+      "pads.formantMix": {
+        "min": 0,
+        "max": 0.55
+      },
+      "pads.detuneCents": {
+        "min": 4,
+        "max": 16
+      },
+      "pads.spread": {
+        "min": 0.5,
+        "max": 1
+      },
+      "pads.reverbSend": {
+        "min": 0.15,
+        "max": 0.55
+      },
+      "pads.duckAmount": {
+        "min": 0.2,
+        "max": 1
+      },
+      "pads.gainDb": {
+        "min": -16,
+        "max": -6
+      },
+      "fx.riserLength": {
+        "min": 1,
+        "max": 4,
+        "step": 1
+      },
+      "fx.riserStartHz": {
+        "min": 120,
+        "max": 2400,
+        "dist": "log"
+      },
+      "fx.riserEndHz": {
+        "min": 6000,
+        "max": 15000,
+        "dist": "log"
+      },
+      "fx.impactLevel": {
+        "min": 0.15,
+        "max": 1.6
+      },
+      "fx.impactDecay": {
+        "min": 0.25,
+        "max": 2.6
+      },
+      "fx.reverbSend": {
+        "min": 0,
+        "max": 0.9
+      },
+      "fx.gainDb": {
+        "min": -14,
+        "max": -4
+      },
+      "reverb.decay": {
+        "min": 0.5,
+        "max": 7
+      },
+      "reverb.brightness": {
+        "min": 0.28,
+        "max": 0.72
+      },
+      "reverb.size": {
+        "min": 0.5,
+        "max": 1.7
+      },
+      "reverb.preDelay": {
+        "min": 0.01,
+        "max": 0.045
+      },
+      "reverb.duckAmount": {
+        "min": 0.2,
+        "max": 1
+      },
+      "reverb.returnDb": {
+        "min": -9,
+        "max": -1
+      },
+      "delay.feedback": {
+        "min": 0.05,
+        "max": 0.78
+      },
+      "delay.damping": {
+        "min": 0.1,
+        "max": 0.95
+      },
+      "delay.returnDb": {
+        "min": -18,
+        "max": 0
+      },
+      "master.driveTargetDb": {
+        "min": -9.2,
+        "max": -7.8
+      },
+      "master.glueThresholdDb": {
+        "min": -9,
+        "max": -4
+      },
+      "master.glueRatio": {
+        "min": 1.8,
+        "max": 3.4
+      },
+      "master.glueAttack": {
+        "min": 0.006,
+        "max": 0.03
+      },
+      "master.glueRelease": {
+        "min": 0.08,
+        "max": 0.22
+      },
+      "master.satDrive": {
+        "min": 1.02,
+        "max": 1.45
+      },
+      "master.shelfHz": {
+        "min": 6000,
+        "max": 11000,
+        "dist": "log"
+      },
+      "master.shelfDb": {
+        "min": 0.4,
+        "max": 3
+      },
+      "master.clipCeiling": {
+        "min": 0.88,
+        "max": 0.99
+      },
+      "master.targetPeakDb": {
+        "min": -1.2,
+        "max": -0.8
+      },
+      "master.widthMid": {
+        "min": 0,
+        "max": 0.012
+      },
+      "lead.pulseWidthCentre": {
+        "min": 0.18,
+        "max": 0.5
+      },
+      "lead.pulseWidthDepth": {
+        "min": 0,
+        "max": 0.35
+      },
+      "lead.syncRatio": {
+        "min": 1,
+        "max": 4
+      },
+      "lead.fmRatio": {
+        "min": 1,
+        "max": 4,
+        "step": 0.5
+      },
+      "lead.fmIndex": {
+        "min": 0.05,
+        "max": 0.32
+      }
+    },
+    "choices": {
+      "scale": {
+        "weights": [
+          4,
+          2,
+          2,
+          1,
+          2,
+          1
+        ]
+      },
+      "arrangement": {
+        "weights": [
+          3,
+          3,
+          2,
+          2
+        ]
+      },
+      "motif.contour": {
+        "weights": [
+          3,
+          2,
+          3,
+          3,
+          2,
+          3,
+          1,
+          1
+        ]
+      },
+      "lead.architecture": {
+        "weights": [
+          6,
+          2,
+          2,
+          1
+        ]
+      },
+      "drums.kick.variant": {
+        "weights": [
+          5,
+          3,
+          2
+        ]
+      },
+      "drums.snare.variant": {
+        "weights": [
+          5,
+          3,
+          2
+        ]
+      }
+    }
+  },
+  "tracks": [
+    {
+      "id": "t0001",
+      "seed": "p0001",
+      "excerpt": "t0001-x.mp3",
+      "full": "t0001-f.mp3",
+      "explore": true
+    },
+    {
+      "id": "t0002",
+      "seed": "p0002",
+      "excerpt": "t0002-x.mp3",
+      "full": "t0002-f.mp3",
+      "explore": false
+    },
+    {
+      "id": "t0003",
+      "seed": "p0003",
+      "excerpt": "t0003-x.mp3",
+      "full": "t0003-f.mp3",
+      "explore": false
+    },
+    {
+      "id": "t0004",
+      "seed": "p0004",
+      "excerpt": "t0004-x.mp3",
+      "full": "t0004-f.mp3",
+      "explore": false
+    },
+    {
+      "id": "t0005",
+      "seed": "p0005",
+      "excerpt": "t0005-x.mp3",
+      "full": "t0005-f.mp3",
+      "explore": false
+    },
+    {
+      "id": "t0006",
+      "seed": "p0006",
+      "excerpt": "t0006-x.mp3",
+      "full": "t0006-f.mp3",
+      "explore": true
+    },
+    {
+      "id": "r01",
+      "seed": "p0005",
+      "excerpt": "t0005-x.mp3",
+      "full": "t0005-f.mp3",
+      "repeatOf": "t0005",
+      "explore": false
+    },
+    {
+      "id": "r02",
+      "seed": "p0004",
+      "excerpt": "t0004-x.mp3",
+      "full": "t0004-f.mp3",
+      "repeatOf": "t0004",
+      "explore": false
+    },
+    {
+      "id": "r03",
+      "seed": "p0006",
+      "excerpt": "t0006-x.mp3",
+      "full": "t0006-f.mp3",
+      "repeatOf": "t0006",
+      "explore": true
+    }
+  ]
+}

@@ -14,6 +14,18 @@ export type BusName = "drums" | "bass808" | "lead" | "arp" | "pads" | "fx";
 
 export const BUS_NAMES: readonly BusName[] = ["drums", "bass808", "lead", "arp", "pads", "fx"];
 
+/**
+ * Intensity at or above which a section counts as a drop.
+ *
+ * Everything that keys off "this is a drop" reads this: the loudness
+ * measurement, the auto-gain probe, drum silence, the 808 fill, the stutter.
+ * It sits at 0.75 rather than 0.9 so the `sustained` template - which
+ * deliberately never fully releases - still has a loudest section to gain
+ * into and still gets its transitions. No other template has a section
+ * between 0.62 and 1.0, so nothing else changed when it moved.
+ */
+export const DROP_INTENSITY = 0.75;
+
 export type TransitionKind = "none" | "riser" | "reverse" | "impact" | "silence";
 
 export interface SectionTemplate {

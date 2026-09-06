@@ -144,8 +144,8 @@ function cardDestruction() {
   const stages = [
     { label: "clean", fn: (x: number) => x },
     { label: "soft clip", fn: (x: number) => softClip(x * 3) },
-    { label: "waveshaper", fn: (x: number) => waveshape(softClip(x * 3), 0.45, 0.12, waveshapeOffset(0.12)) },
-    { label: "hard clip", fn: (x: number) => hardClip(waveshape(softClip(x * 3), 0.45, 0.12, waveshapeOffset(0.12)), 0.62) },
+    { label: "waveshaper", fn: (x: number) => waveshape(softClip(x * 3), 0.45, 0.12, waveshapeOffset(0.45, 0.12)) },
+    { label: "hard clip", fn: (x: number) => hardClip(waveshape(softClip(x * 3), 0.45, 0.12, waveshapeOffset(0.45, 0.12)), 0.62) },
   ];
 
   const per = 1.2;

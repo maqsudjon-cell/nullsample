@@ -118,8 +118,8 @@ const ARRANGEMENTS: readonly ArrangementTemplate[] = [
       { name: "drop",   bars: [16],     buses: ["drums", "bass808", "lead", "pads", "fx"],      intensity: 1.00, filterOpen: 1.00, gainDb:  0, transitionIn: "impact",  fillOut: true  },
       { name: "break",  bars: [4],      buses: ["pads", "fx"],                                  intensity: 0.22, filterOpen: 0.40, gainDb: -4, transitionIn: "reverse", fillOut: false },
       { name: "drop2",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "impact", fillOut: true  },
-      { name: "break2", bars: [4],      buses: ["arp", "pads", "fx"],                           intensity: 0.26, filterOpen: 0.45, gainDb: -4, transitionIn: "reverse", fillOut: true  },
-      { name: "drop3",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "impact", fillOut: true  },
+      { name: "break2", bars: [4],      buses: ["drums", "arp", "pads", "fx"],                   intensity: 0.26, filterOpen: 0.45, gainDb: -4, transitionIn: "reverse", fillOut: true  },
+      { name: "drop3",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "silence", fillOut: true  },
       { name: "outro",  bars: [8],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.32, gainDb: -4, transitionIn: "reverse", fillOut: false },
     ],
   },
@@ -132,6 +132,48 @@ const ARRANGEMENTS: readonly ArrangementTemplate[] = [
       { name: "break",  bars: [8],      buses: ["pads", "arp", "fx"],                           intensity: 0.30, filterOpen: 0.48, gainDb: -3, transitionIn: "reverse", fillOut: true  },
       { name: "drop2",  bars: [16],     buses: ["drums", "bass808", "lead", "pads", "fx"],      intensity: 1.00, filterOpen: 1.00, gainDb:  0, transitionIn: "impact",  fillOut: false },
       { name: "outro",  bars: [4],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.30, gainDb: -5, transitionIn: "reverse", fillOut: false },
+    ],
+  },
+
+  // Opens on the drop. No build, no easing in: the first bar is the loudest
+  // thing in the track, which is how a large share of this genre is released.
+  {
+    name: "cold-open",
+    sections: [
+      { name: "drop",   bars: [16],     buses: ["drums", "bass808", "lead", "pads", "fx"],      intensity: 1.00, filterOpen: 1.00, gainDb:  0, transitionIn: "impact",  fillOut: true  },
+      { name: "verse",  bars: [8],      buses: ["drums", "arp", "pads", "fx"],                  intensity: 0.45, filterOpen: 0.55, gainDb: -2, transitionIn: "none",    fillOut: true  },
+      { name: "drop2",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "silence", fillOut: false },
+      { name: "verse2", bars: [8],      buses: ["drums", "bass808", "arp", "pads", "fx"],       intensity: 0.50, filterOpen: 0.60, gainDb: -2, transitionIn: "reverse", fillOut: true  },
+      { name: "drop3",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "impact", fillOut: true  },
+      { name: "outro",  bars: [4],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.30, gainDb: -5, transitionIn: "reverse", fillOut: false },
+    ],
+  },
+
+  // One long breakdown at the centre with a short drop either side. The
+  // breakdown keeps its drums, so both drops can be entered from a cut.
+  {
+    name: "long-break",
+    sections: [
+      { name: "intro",  bars: [8],      buses: ["pads", "fx"],                                  intensity: 0.12, filterOpen: 0.30, gainDb: -3, transitionIn: "none",    fillOut: false },
+      { name: "build",  bars: [8],      buses: ["drums", "arp", "pads", "fx"],                  intensity: 0.55, filterOpen: 0.58, gainDb: -1, transitionIn: "riser",   fillOut: true  },
+      { name: "drop",   bars: [8],      buses: ["drums", "bass808", "lead", "pads", "fx"],      intensity: 1.00, filterOpen: 1.00, gainDb:  0, transitionIn: "silence", fillOut: true  },
+      { name: "break",  bars: [24],     buses: ["drums", "arp", "pads", "fx"],                  intensity: 0.35, filterOpen: 0.50, gainDb: -3, transitionIn: "reverse", fillOut: true  },
+      { name: "drop2",  bars: [8],      buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 1.00, filterOpen: 1.00, gainDb: 0, transitionIn: "silence", fillOut: true  },
+      { name: "outro",  bars: [8],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.32, gainDb: -4, transitionIn: "reverse", fillOut: false },
+    ],
+  },
+
+  // Never fully releases. Nothing reaches drop intensity, the filter never
+  // opens all the way, and the track holds one unresolved level throughout.
+  {
+    name: "sustained",
+    sections: [
+      { name: "intro",  bars: [8],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.30, gainDb: -3, transitionIn: "none",    fillOut: false },
+      { name: "hold",   bars: [16],     buses: ["drums", "bass808", "arp", "pads", "fx"],       intensity: 0.62, filterOpen: 0.62, gainDb: -1, transitionIn: "riser",   fillOut: true  },
+      { name: "lift",   bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 0.78, filterOpen: 0.74, gainDb: 0, transitionIn: "impact", fillOut: true  },
+      { name: "hold2",  bars: [8],      buses: ["drums", "bass808", "arp", "pads", "fx"],       intensity: 0.58, filterOpen: 0.58, gainDb: -2, transitionIn: "reverse", fillOut: true  },
+      { name: "lift2",  bars: [16],     buses: ["drums", "bass808", "lead", "arp", "pads", "fx"], intensity: 0.82, filterOpen: 0.80, gainDb: 0, transitionIn: "impact", fillOut: true  },
+      { name: "outro",  bars: [8],      buses: ["pads", "fx"],                                  intensity: 0.15, filterOpen: 0.30, gainDb: -4, transitionIn: "reverse", fillOut: false },
     ],
   },
 ];

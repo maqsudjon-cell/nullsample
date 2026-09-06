@@ -1,0 +1,4 @@
+# The rating batch is regenerable from its seeds and is replaced every cycle.
+# Marking it binary keeps diffs out of the log; it is still versioned so a
+# cycle can be reverted whole.
+web/rate/batch/*.mp3 binary -diff

@@ -22,6 +22,17 @@ export interface RangeSpec {
   dist?: Distribution;
   /** round to this increment after sampling */
   step?: number;
+  /**
+   * Sampling weight curve across the range, as equal-width buckets from `min`
+   * to `max`. Omitted means uniform.
+   *
+   * This is how tuning steers the engine without ever excluding anything: a
+   * region that has rated badly becomes rare, not unreachable, so a wrong
+   * verdict from a small sample can be recovered from later. Every weight is
+   * floored above zero when it is written, and the sampler treats a
+   * non-positive weight as the floor rather than as an exclusion.
+   */
+  weights?: number[];
 }
 
 export interface ChoiceSpec {

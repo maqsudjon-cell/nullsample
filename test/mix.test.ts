@@ -9,6 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { DROP_INTENSITY } from "../compose/arrange.ts";
 import { getPreset } from "../presets/index.ts";
 import { renderStem, renderTrack, TrackRenderer } from "../render/track.ts";
 import { gain2db } from "../core/dmath.ts";
@@ -87,9 +88,18 @@ test("loudness is measured over the drops, not the whole file", () => {
       loud.dropRmsDb > loud.integratedRmsDb + 0.5,
       `seed ${seed}: drop RMS ${loud.dropRmsDb.toFixed(2)} is not above integrated ${loud.integratedRmsDb.toFixed(2)} — the section filter is not working`,
     );
+    // Named "drop" is not the invariant; being at or above DROP_INTENSITY is.
+    // The `sustained` template deliberately never reaches drop intensity and
+    // calls its peaks `lift`, and the measurement must follow the arrangement
+    // rather than a naming convention.
+    const loudEnough = new Set(
+      r.plan.arrangement.sections
+        .filter((x) => x.intensity >= DROP_INTENSITY)
+        .map((x) => x.name),
+    );
     assert.ok(
-      loud.loudSections.every((n) => n.startsWith("drop")),
-      `seed ${seed}: measured ${loud.loudSections.join(", ")}, expected drop sections only`,
+      loud.loudSections.every((n) => loudEnough.has(n)),
+      `seed ${seed}: measured ${loud.loudSections.join(", ")}, expected only sections at or above DROP_INTENSITY`,
     );
     assert.ok(
       loud.truePeakDb >= r.stats.peakDb - 0.01,

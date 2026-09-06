@@ -17,6 +17,7 @@
 import { dsqrt, gain2db } from "../core/dmath.ts";
 import { kaiserLowpass } from "../core/shape.ts";
 import type { Stereo } from "../core/buffer.ts";
+import { DROP_INTENSITY } from "../compose/arrange.ts";
 import type { SectionMark } from "./plan.ts";
 
 /** Short-term window, in seconds. */
@@ -24,7 +25,7 @@ export const SHORT_TERM_SECONDS = 3;
 /** Energy is accumulated in blocks this long, then summed across the window. */
 const BLOCK_SECONDS = 0.1;
 /** A section counts as loud at or above this intensity. */
-const LOUD_INTENSITY = 0.9;
+const LOUD_INTENSITY = DROP_INTENSITY;
 /** Below this crest factor the master is over-compressed whatever RMS says. */
 export const CREST_FLOOR_DB = 6;
 
@@ -101,7 +102,9 @@ export function analyseLoudness(buf: Stereo, sections: readonly SectionMark[]): 
   const integratedRmsDb = gain2db(dsqrt(total / (buf.length * 2)));
 
   const loud = sections.filter((s) => s.intensity >= LOUD_INTENSITY);
-  const measured = loud.length > 0 ? loud : sections.slice();
+  let hottest = sections[0];
+  for (const s of sections) if (s && s.intensity > hottest.intensity) hottest = s;
+  const measured = loud.length > 0 ? loud : (hottest ? [hottest] : sections.slice());
 
   // Sliding short-term RMS, but only over windows that sit entirely inside a
   // loud section. A window straddling the edge of a drop would average the

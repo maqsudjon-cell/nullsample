@@ -1,0 +1,124 @@
+/**
+ * The progress screen.
+ *
+ * An unattended loop the human cannot inspect is worse than a manual one, so
+ * this shows what the loop did and why, and carries the only control it has:
+ * a pause. Reads `tuning.json`, which every cycle commits alongside the weight
+ * change that produced it.
+ */
+
+interface CycleAxisScores { hook: number; punch: number; space: number; interest: number }
+interface Move { param: string; from: number[]; to: number[]; axis: string; r: number; n: number }
+interface Cycle {
+  cycle: number;
+  at: string;
+  batchId: string;
+  rated: number;
+  scores: CycleAxisScores;
+  moved: Move[];
+  skipped: { param: string; reason: string }[];
+  discardedSessions: { session: string; agreement: number; reason: string }[];
+  selfAgreement: number;
+  stopped?: string;
+}
+interface Tuning { cycles: Cycle[]; paused: boolean; stopped?: string }
+
+const AXES = ["hook", "punch", "space", "interest"] as const;
+const COLOURS = ["#FF6A1A", "#838C99", "#D8DCE2", "#B34A12"];
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+function drawTrend(cycles: Cycle[]): void {
+  const c = $("trend") as unknown as HTMLCanvasElement;
+  const ctx = c.getContext("2d");
+  if (!ctx) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = c.clientWidth || 340;
+  const h = 200;
+  c.width = Math.round(w * dpr);
+  c.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const pad = 18;
+  ctx.strokeStyle = "#1C2028";
+  ctx.lineWidth = 1;
+  for (let s = 1; s <= 5; s++) {
+    const y = h - pad - ((s - 1) / 4) * (h - pad * 2);
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  }
+  if (cycles.length === 0) return;
+  const n = Math.max(1, cycles.length - 1);
+  AXES.forEach((axis, i) => {
+    ctx.strokeStyle = COLOURS[i];
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    cycles.forEach((cy, k) => {
+      const x = pad + (k / n) * (w - pad * 2);
+      const v = cy.scores[axis] ?? 0;
+      const y = h - pad - ((v - 1) / 4) * (h - pad * 2);
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+}
+
+async function main(): Promise<void> {
+  let t: Tuning;
+  try {
+    t = await (await fetch("/rate/tuning.json", { cache: "no-cache" })).json();
+  } catch {
+    $("status").textContent = "No cycles have run yet.";
+    return;
+  }
+  const cycles = t.cycles ?? [];
+  const last = cycles[cycles.length - 1];
+  const rated = cycles.reduce((s, c) => s + c.rated, 0);
+  const discarded = cycles.reduce((s, c) => s + c.discardedSessions.length, 0);
+  $("status").textContent = t.stopped
+    ? `Tuning complete — ${t.stopped}. ${cycles.length} cycles, ${rated} tracks rated.`
+    : `Cycle ${cycles.length}. ${rated} tracks rated, ${discarded} sessions discarded.${t.paused ? " Paused." : ""}`;
+
+  drawTrend(cycles);
+  $("legend").innerHTML = AXES
+    .map((a, i) => `<span style="color:${COLOURS[i]}">${a}${last ? ` ${last.scores[a].toFixed(2)}` : ""}</span>`)
+    .join("   ");
+
+  const moved = $("moved");
+  const moves = last?.moved ?? [];
+  if (moves.length === 0) {
+    moved.innerHTML = `<li>Nothing cleared the confidence bar this cycle.</li>`;
+  } else {
+    moved.innerHTML = moves
+      .map((m) => `<li><b>${m.param}</b> — ${m.axis}, r=${m.r.toFixed(2)} over ${m.n} tracks</li>`)
+      .join("");
+  }
+
+  $("agreement").textContent = last
+    ? `Self-agreement ${(last.selfAgreement * 100).toFixed(0)}% on the repeat tracks.`
+    : "";
+  const dis = $("discards");
+  const all = cycles.flatMap((c) => c.discardedSessions);
+  dis.innerHTML = all.length === 0
+    ? `<li>No sessions discarded.</li>`
+    : all.map((d) => `<li>${d.session} — ${d.reason} (agreement ${(d.agreement * 100).toFixed(0)}%)</li>`).join("");
+
+  const btn = $("pause") as HTMLButtonElement;
+  const setLabel = () => {
+    const paused = localStorage.getItem("ns.tune.paused") === "1" || t.paused;
+    btn.textContent = paused ? "Cycles paused — resume" : "Pause new cycles";
+  };
+  setLabel();
+  btn.addEventListener("click", async () => {
+    const paused = localStorage.getItem("ns.tune.paused") === "1" || t.paused;
+    localStorage.setItem("ns.tune.paused", paused ? "0" : "1");
+    t.paused = !paused;
+    setLabel();
+  });
+}
+
+void main();
+
+export {};

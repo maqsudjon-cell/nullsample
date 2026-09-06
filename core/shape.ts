@@ -242,8 +242,41 @@ export function softClip(x: number): number {
  * constant out, and on a 40 Hz sub that constant cannot be filtered away
  * without eating the fundamental.
  */
-export function waveshapeOffset(bias: number): number {
-  return bias === 0 ? 0 : softClip(bias);
+export function waveshapeOffset(fold: number, bias: number): number {
+  return bias === 0 ? 0 : foldShape(bias, fold);
+}
+
+/**
+ * The shaper's curve, before the DC offset is removed.
+ *
+ * `fold` crossfades from a plain soft clip toward a wavefold built out of the
+ * soft clip itself: `s * (1 - s^2)`, scaled so its peak reaches unity. That
+ * shape rises, turns over and falls back toward zero as the input grows, which
+ * is what a wavefolder does, and it is smooth everywhere because `softClip` is.
+ *
+ * Two things had to be true at once. `fold` had to become reachable: the old
+ * form only folded above unity, and the chain soft-clips before this, so the
+ * branch never ran and `bass.fold` measured bit-identical. And the chain had to
+ * keep its 45 dB of alias rejection: the old form was C0 at best - it jumped
+ * 0.22 at the threshold - and both a step and a slope reversal are broadband.
+ *
+ * Acting on `s` rather than on a threshold does both. It folds at every level,
+ * so the parameter works at any drive, and it is smooth everywhere because
+ * `softClip` is. The soft clip upstream stays: it is not redundant, it is what
+ * keeps the shaper gentle enough for 4x oversampling to cope with.
+ *
+ * A quarter-rate sine is the textbook smooth fold and clears the bar too, but
+ * it costs a series evaluation on every oversampled sample of every distorted
+ * bus - 48% on the most expensive stage in the engine, measured. This is three
+ * multiplies on a value `softClip` has already produced.
+ */
+const FOLD_NORM = 2.598076211353316; // 1 / max(s - s^3), the peak of the fold curve
+
+function foldShape(v: number, fold: number): number {
+  const s = softClip(v);
+  if (fold <= 0) return s;
+  const folded = FOLD_NORM * s * (1 - s * s);
+  return s + fold * (folded - s);
 }
 
 /**
@@ -255,17 +288,7 @@ export function waveshapeOffset(bias: number): number {
  * stream.
  */
 export function waveshape(x: number, fold: number, bias: number, offset: number): number {
-  const v = x + bias;
-  const s = softClip(v);
-  if (fold <= 0) return s - offset;
-  // partial wavefold: reflect the excess back down
-  const a = v < 0 ? -v : v;
-  if (a <= 1) return s - offset;
-  const excess = a - 1;
-  const folded = 1 - excess * fold;
-  const clamped = folded < -1 ? -1 : folded;
-  const sgn = v < 0 ? -1 : 1;
-  return sgn * clamped - offset;
+  return foldShape(x + bias, fold) - offset;
 }
 
 export function hardClip(x: number, ceiling: number): number {
@@ -412,8 +435,7 @@ export class DistortionChain {
   private resting(): number {
     if (!this.restingValid) {
       const { drive, fold, bias, ceiling, output } = this.params;
-      let v = softClip(0 * drive);
-      v = waveshape(v, fold, bias, waveshapeOffset(bias));
+      let v = waveshape(softClip(0 * drive), fold, bias, waveshapeOffset(fold, bias));
       v = hardClip(v, ceiling);
       this.restingValue = v * output;
       this.restingValid = true;
@@ -452,11 +474,9 @@ export class DistortionChain {
     const s = this.os.scratch;
     const m = n * 4;
     const clipper = this.clipper;
-    const offset = waveshapeOffset(bias);
+    const offset = waveshapeOffset(fold, bias);
     for (let i = 0; i < m; i++) {
-      let v = s[i] * drive;
-      v = softClip(v);
-      v = waveshape(v, fold, bias, offset);
+      let v = waveshape(softClip(s[i] * drive), fold, bias, offset);
       v = clipper.process(v);
       s[i] = v * output;
     }

@@ -25,6 +25,7 @@ export class MasterChain {
   private sr: number;
   private p: MasterParams;
   private sideHp: Svf;
+  private sideHp2: Svf;
   private midHp: Svf;
   private haas: DelayLine;
   private haasSamples: number;
@@ -49,8 +50,18 @@ export class MasterChain {
   constructor(sampleRate: number, p: MasterParams) {
     this.sr = sampleRate;
     this.p = p;
+    // Two cascaded 2-pole sections, not one.
+    //
+    // The spec's rule is that everything below 120 Hz is mono. A single 2-pole
+    // section leaves the side signal only 12 dB down at 60 Hz and 19 dB at 40,
+    // which was fine while the sources were narrow and stopped being fine once
+    // the spread ranges were widened: measured low-band correlation fell from
+    // 0.998 to 0.80. Two sections put 40 Hz nearly 40 dB down, so the rule
+    // holds however wide a preset asks the buses to be.
     this.sideHp = new Svf(sampleRate);
     this.sideHp.set(120, 0.707);
+    this.sideHp2 = new Svf(sampleRate);
+    this.sideHp2.set(120, 0.707);
     this.midHp = new Svf(sampleRate);
     this.midHp.set(400, 0.707);
     this.haas = new DelayLine(Math.ceil(0.05 * sampleRate));
@@ -69,6 +80,10 @@ export class MasterChain {
     this.osR = new Oversampler4x(BLOCK);
     this.clipL.ceiling = p.clipCeiling;
     this.clipR.ceiling = p.clipCeiling;
+    // Compensates the saturator's SMALL-SIGNAL gain, and is blind to what it
+    // does to peaks: at drive 2 it removes 5 dB the peak never recovers, which
+    // is why `master.satDrive` cannot be widened past about 1.5 without a
+    // peak-referenced makeup replacing this.
     this.satComp = 1 / (1 + (p.satDrive - 1) * 0.8);
 
     // the shelf sits between the saturator and the clipper, so it runs at the
@@ -121,7 +136,7 @@ export class MasterChain {
       const r = R[i];
       const mid = (l + r) * 0.5;
       let side = (l - r) * 0.5;
-      side = this.sideHp.highpass(side);
+      side = this.sideHp2.highpass(this.sideHp.highpass(side));
       if (widen) {
         const highs = this.midHp.highpass(mid);
         this.haas.write(highs);

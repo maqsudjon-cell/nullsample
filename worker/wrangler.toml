@@ -1,0 +1,17 @@
+name = "nullsample-rate"
+main = "rate-worker.js"
+compatibility_date = "2026-09-01"
+
+# Created with:  wrangler kv namespace create RATINGS
+# then paste the id below.
+[[kv_namespaces]]
+binding = "RATINGS"
+id = "90a52b2bcda04a769860eb9089d94094"
+
+[vars]
+# Only needed for the Addendum 9 loop; leave unset to keep the loop disarmed.
+# GITHUB_REPO = "owner/repo"
+
+# Secrets, set with `wrangler secret put`:
+#   RATE_SECRET    the shared key the phone sends as x-rate-key
+#   GITHUB_TOKEN   optional, repo-scoped, only for repository_dispatch
