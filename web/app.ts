@@ -78,6 +78,10 @@ let analyser: AnalyserNode | null = null;
 let analyserBuf: Float32Array | null = null;
 /** Set when the context stops running while we believed we were playing. */
 let needsGesture = false;
+/** how much of the track has been rendered, 0..1, for the assembly animation */
+let assembled = 0;
+let seedAnim = 0;
+let spectrumRaf = 0;
 
 /** Everything the #debug readout reports. Written where it actually happens. */
 const probe = {
@@ -101,7 +105,11 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const elGenerate = $<HTMLButtonElement>("generate");
 const elPlay = $<HTMLButtonElement>("play");
 const elSeed = $<HTMLInputElement>("seed");
-const elDice = $<HTMLButtonElement>("dice");
+const elShare = $<HTMLButtonElement>("share");
+const elDlMenu = $<HTMLDetailsElement>("dlmenu");
+const elSpectrum = $<HTMLPreElement>("spectrum");
+const elHint = $<HTMLParagraphElement>("hint");
+const elRetry = $<HTMLButtonElement>("retry");
 const elCanvas = $<HTMLCanvasElement>("scope");
 const elRuler = $<HTMLDivElement>("ruler");
 const elTime = $<HTMLSpanElement>("time");
@@ -131,6 +139,62 @@ function newSeed(): string {
   let s = "";
   for (let i = 0; i < 8; i++) s += SEED_ALPHABET[bytes[i] % SEED_ALPHABET.length];
   return `${s.slice(0, 4)}-${s.slice(4)}`;
+}
+
+/**
+ * Cleans up a typed or pasted seed.
+ *
+ * Deliberately NOT filtered to SEED_ALPHABET. That alphabet exists to make
+ * generated seeds readable aloud - no I, O, 0 or 1 - but the engine hashes
+ * whatever string it is given, so filtering input to it would reject perfectly
+ * valid seeds. Including this site's own demo seeds: NULL-0001 came back as
+ * "NULL".
+ */
+function normaliseSeedInput(raw: string): string {
+  const cleaned = raw.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 32);
+  // eight bare characters get the familiar grouping; anything else is left alone
+  return /^[A-Z0-9]{8}$/.test(cleaned)
+    ? `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`
+    : cleaned.replace(/^-+|-+$/g, "");
+}
+
+/**
+ * The eight characters cycle and settle left to right over about 400 ms.
+ *
+ * It is small and it does real work: a seed that resolves in front of you reads
+ * as the SOURCE of the track rather than a label attached to it afterwards.
+ */
+function animateSeed(target: string): void {
+  // The true value goes in first, always. requestAnimationFrame is throttled
+  // in a hidden or backgrounded tab, so an animation that is the only thing
+  // writing the final value leaves a stale seed on screen - which is the same
+  // mistake as letting rAF drive the scheduler, caught the same way.
+  elSeed.value = target;
+  if (reducedMotion) return;
+  cancelAnimationFrame(seedAnim);
+  const plain = target.replace("-", "");
+  const start = performance.now();
+  const DURATION = 400;
+  let frame = 0;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / DURATION);
+    const settled = Math.floor(t * plain.length);
+    frame++;
+    let out = "";
+    for (let i = 0; i < plain.length; i++) {
+      // Cycled by index rather than by Math.random: it looks the same at
+      // fifteen frames a second, and it keeps the determinism lint meaningful
+      // - a reader scanning for randomness should never have to decide which
+      // occurrences are "only cosmetic".
+      out += i < settled
+        ? plain[i]
+        : SEED_ALPHABET[(frame * 7 + i * 13) % SEED_ALPHABET.length];
+    }
+    elSeed.value = `${out.slice(0, 4)}-${out.slice(4)}`;
+    if (t < 1) seedAnim = requestAnimationFrame(step);
+    else elSeed.value = target;
+  };
+  seedAnim = requestAnimationFrame(step);
 }
 
 function readHash(): void {
@@ -205,6 +269,7 @@ function generate(): void {
   // The waveform clears and redraws as the new track arrives. This is the
   // action people repeat most, so it should feel like something happening.
   track = null;
+  assembled = 0;
   shownSection = "";
   elNow.textContent = "";
   scheduledSamples = 0;
@@ -212,7 +277,6 @@ function generate(): void {
   probe.scheduledInPast = 0;
   probe.chunksScheduled = 0;
   setState("rendering");
-  elSeed.value = seed;
   writeHash();
   drawScope();
   ensureWorker().postMessage({
@@ -261,7 +325,14 @@ function appendChunk(
   track.right.set(r, start);
   track.peaks.set(new Float32Array(peaks), index * PEAKS_PER_CHUNK * 2);
   track.filled = start + count_;
+  assembled = track.filled / track.info.totalSamples;
   drawScope();
+  // The wait is unavoidable, so spend it showing the track being built rather
+  // than on a progress bar: the waveform draws in section by section, the
+  // lanes fill behind it, and the ruler ticks in as the render passes each
+  // boundary. Honest progress, and the same information a bar would carry.
+  for (const bus of track.info.buses) drawLane(bus, track.info);
+  revealTicks();
 
   const buffered = track.filled / track.info.sampleRate;
   if (state === "rendering" && buffered >= PREBUFFER_SECONDS) {
@@ -273,9 +344,12 @@ function appendChunk(
 
 function onRenderComplete(): void {
   if (!track) return;
+  assembled = 1;
   elWav.disabled = false;
   elStems.disabled = false;
   renderLanes(track.info);
+  revealTicks();
+  maybeShowHint();
   if (state === "rendering") void beginPlayback(0);
   if (state === "paused" && anchorSample === 0) drawScope(0);
   announce(`Track ready. ${clock(track.info.totalSamples / track.info.sampleRate)}.`);
@@ -354,6 +428,71 @@ function attachAnalyser(): void {
   analyser.fftSize = 2048;
   analyserBuf = new Float32Array(analyser.fftSize);
   masterGain.connect(analyser);
+}
+
+// -------------------------------------------------------------- spectrum ---
+
+/**
+ * A monospace character grid driven by the analyser on the playing audio.
+ *
+ * The one rule that matters: it must be real. A faked or looping animation
+ * here would be the single lie that undercuts a product whose entire claim is
+ * that the audio is computed in front of you. So it reads the graph, and when
+ * the graph is silent it stops rather than idling.
+ */
+const SPECTRUM_COLS = 22;
+const SPECTRUM_ROWS = 4;
+const BLOCKS = " \u2591\u2592\u2593\u2588";
+let freqBuf: Uint8Array | null = null;
+const smoothed = new Float32Array(SPECTRUM_COLS);
+
+function paintSpectrum(): void {
+  if (!analyser) return;
+  if (!freqBuf || freqBuf.length !== analyser.frequencyBinCount) {
+    freqBuf = new Uint8Array(analyser.frequencyBinCount);
+  }
+  analyser.getByteFrequencyData(freqBuf as Uint8Array<ArrayBuffer>);
+  // Logarithmic column edges: linear bins would spend nineteen columns above
+  // 5 kHz, where this music has almost nothing to say.
+  const n = freqBuf.length;
+  let out = "";
+  for (let c = 0; c < SPECTRUM_COLS; c++) {
+    const lo = Math.floor(Math.pow(n, c / SPECTRUM_COLS));
+    const hi = Math.max(lo + 1, Math.floor(Math.pow(n, (c + 1) / SPECTRUM_COLS)));
+    let sum = 0;
+    for (let i = lo; i < hi && i < n; i++) sum += freqBuf[i];
+    const v = sum / (hi - lo) / 255;
+    smoothed[c] = smoothed[c] * 0.6 + v * 0.4;
+  }
+  for (let row = SPECTRUM_ROWS - 1; row >= 0; row--) {
+    for (let c = 0; c < SPECTRUM_COLS; c++) {
+      const level = smoothed[c] * SPECTRUM_ROWS - row;
+      const idx = level <= 0 ? 0 : Math.min(4, Math.ceil(level * 4));
+      out += BLOCKS[idx];
+    }
+    if (row > 0) out += "\n";
+  }
+  elSpectrum.textContent = out;
+}
+
+function clearSpectrum(): void {
+  smoothed.fill(0);
+  elSpectrum.textContent = "";
+}
+
+function spectrumLoop(): void {
+  if (state !== "playing") {
+    spectrumRaf = 0;
+    clearSpectrum();
+    return;
+  }
+  paintSpectrum();
+  spectrumRaf = requestAnimationFrame(spectrumLoop);
+}
+
+function startSpectrum(): void {
+  if (reducedMotion || spectrumRaf !== 0) return;
+  spectrumRaf = requestAnimationFrame(spectrumLoop);
 }
 
 function outputLevelDb(): number {
@@ -542,11 +681,11 @@ function pumpOnce(): void {
 
   if (state === "playing") {
     if (track.complete && pos >= track.info.totalSamples - 1) {
+      // Loop rather than stop dead. A track that ends in silence with no next
+      // action loses the visitor at the exact moment they were listening.
       stopSources();
-      anchorSample = 0;
-      setState("paused");
-      stopClocks();
-      raf = requestAnimationFrame(draw);
+      scheduledSamples = 0;
+      void beginPlayback(0);
       return;
     }
     scheduleReady();
@@ -751,13 +890,24 @@ function drawScope(playhead = -1): void {
  * "breakdrop2" and a clipped "outro" in the live build. The ticks carry the
  * boundaries; the name of the current section is shown once, large, above.
  */
+/** Ticks appear as the render reaches them, so the structure arrives with the audio. */
+function revealTicks(): void {
+  if (!track) return;
+  const upto = reducedMotion ? track.info.totalSamples : track.filled;
+  for (const t of Array.from(elRuler.querySelectorAll<HTMLElement>(".tick"))) {
+    const at = Number(t.dataset.start ?? "0");
+    if (at <= upto) t.dataset.shown = "true";
+  }
+}
+
 function renderRuler(info: PlanInfo): void {
   const total = info.totalSamples;
   const parts: string[] = ['<div class="playhead" id="playhead" style="left:0;display:none"></div>'];
   for (const s of info.sections) {
     const pct = (s.startSample / total) * 100;
     parts.push(
-      `<div class="tick" data-start="${s.startSample}" data-end="${s.endSample}" style="left:${pct}%"></div>`,
+      `<div class="tick" data-start="${s.startSample}" data-end="${s.endSample}"` +
+        ` data-shown="${s.startSample === 0 ? "true" : "false"}" style="left:${pct}%"></div>`,
     );
   }
   elRuler.innerHTML = parts.join("");
@@ -821,17 +971,16 @@ function prettyScale(name: string): string {
  * they go behind the technical toggle.
  */
 function renderStamp(info: PlanInfo): void {
+  // Tempo and length only. "E MIN PENT" means nothing to a video editor, and
+  // everything it might mean to anyone else is one tap away under `details`.
   const secs = info.totalSamples / info.sampleRate;
-  elStamp.textContent = [
-    `${info.tempo.toFixed(1)} BPM`,
-    `${info.key} ${prettyScale(info.scale).toUpperCase()}`,
-    clock(secs),
-  ].join("  \u00B7  ");
+  elStamp.textContent = [`${info.tempo.toFixed(0)} BPM`, clock(secs)].join("  \u00B7  ");
   renderTech(info);
 }
 
 function renderTech(info: PlanInfo): void {
   const rows: [string, string][] = [
+    ["key", `${info.key} ${prettyScale(info.scale)}`],
     ["arrangement", info.arrangement],
     ["bars", String(info.bars)],
     ["sample rate", `${(info.sampleRate / 1000).toFixed(1)} kHz`],
@@ -859,25 +1008,31 @@ function renderLanes(info: PlanInfo): void {
     elLanes.innerHTML = info.buses
       .map((bus) => {
         const label = BUS_LABELS[bus] ?? bus;
-        return `<div class="lane" data-bus="${bus}" data-locked="false">
-          <button type="button" class="lock" data-bus="${bus}" aria-pressed="false"
-            aria-label="Lock the ${label} bus, so rerolling keeps it"></button>
+        // "keep" rather than "lock": lock-and-reroll is the one thing the
+        // model-based competitors structurally cannot do, and it was sitting
+        // on screen as six grey bars with no affordance and a word nobody
+        // reaches for. A lane you tap that then reads `keeping` needs no
+        // explanation at all.
+        return `<button type="button" class="lane" data-bus="${bus}" data-keep="false"
+            aria-pressed="false" aria-label="Keep ${label} when you reroll">
           <span class="name">${label}</span>
           <canvas data-bus="${bus}" aria-hidden="true"></canvas>
-        </div>`;
+          <span class="keepmark">keeping</span>
+        </button>`;
       })
       .join("");
-    for (const b of Array.from(elLanes.querySelectorAll<HTMLButtonElement>(".lock"))) {
+    for (const b of Array.from(elLanes.querySelectorAll<HTMLButtonElement>(".lane"))) {
       b.addEventListener("click", () => toggleLock(b.dataset.bus ?? ""));
     }
   }
   for (const bus of info.buses) {
     drawLane(bus, info);
     const lane = elLanes.querySelector<HTMLElement>(`.lane[data-bus="${bus}"]`);
-    const locked = locks[bus] !== undefined;
-    if (lane) lane.dataset.locked = String(locked);
-    const btn = elLanes.querySelector<HTMLButtonElement>(`.lock[data-bus="${bus}"]`);
-    if (btn) btn.setAttribute("aria-pressed", String(locked));
+    const kept = locks[bus] !== undefined;
+    if (lane) {
+      lane.dataset.keep = String(kept);
+      lane.setAttribute("aria-pressed", String(kept));
+    }
   }
 }
 
@@ -912,13 +1067,38 @@ function drawLane(bus: string, info: PlanInfo): void {
   const y = Math.round(h / 2) - 1;
   g.fillStyle = line;
   g.fillRect(0, y, w, 2);
+  // Each lane fills left to right as the render reaches it. The bar is not a
+  // progress indicator standing in for the work - it IS the work, drawn where
+  // that part will actually play.
+  const reach = reducedMotion ? w : assembled * w;
   g.fillStyle = active;
   for (const s of info.sections) {
     if (!s.buses.includes(bus)) continue;
     const x = (s.startSample / total) * w;
     const bw = ((s.endSample - s.startSample) / total) * w;
-    g.fillRect(x, y - 3, Math.max(1, bw - 1.5), 8);
+    const drawn = Math.min(Math.max(1, bw - 1.5), reach - x);
+    if (drawn <= 0) continue;
+    g.fillRect(x, y - 3, drawn, 8);
   }
+}
+
+const HINT_KEY = "ns.kept";
+
+/**
+ * Teach it once, by doing.
+ *
+ * One line under the lanes after the first track finishes, gone for good after
+ * the first successful keep. No modal, no tour, no dismissible banner - all of
+ * which are ways of admitting the interface does not explain itself.
+ */
+function maybeShowHint(): void {
+  let learned = false;
+  try {
+    learned = localStorage.getItem(HINT_KEY) === "1";
+  } catch {
+    learned = false;
+  }
+  elHint.hidden = learned;
 }
 
 function toggleLock(bus: string): void {
@@ -927,7 +1107,13 @@ function toggleLock(bus: string): void {
     delete locks[bus];
   } else {
     locks[bus] = seed;
-    count("lock");
+    count("keep");
+    elHint.hidden = true;
+    try {
+      localStorage.setItem(HINT_KEY, "1");
+    } catch {
+      /* private mode: the hint simply shows again next time */
+    }
   }
   if (track) renderLanes(track.info);
   writeHash();
@@ -983,6 +1169,39 @@ function buildWords(): void {
       writeHash();
       generate();
     });
+  }
+}
+
+// ----------------------------------------------------------------- share ---
+
+/**
+ * A seed is eight characters that reproduce a track exactly on any machine, so
+ * a shared link does not point at a file - it regenerates the music on the
+ * recipient's device. That is the only organic distribution this product has.
+ */
+async function shareSeed(): Promise<void> {
+  const url = `${location.origin}/generate/#s=${encodeURIComponent(seed)}`;
+  const label = elShare.textContent ?? "SHARE";
+  const done = (text: string) => {
+    elShare.textContent = text;
+    announce(text === "COPIED" ? "Link copied." : "Copy the link from the address bar.");
+    setTimeout(() => { elShare.textContent = label; }, 1600);
+  };
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: `Nullsample ${seed}`, url });
+      count("share");
+      return;
+    } catch {
+      /* dismissed, or unsupported for this payload: fall through to copy */
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    done("COPIED");
+    count("share");
+  } catch {
+    done("COPY IT");
   }
 }
 
@@ -1049,16 +1268,20 @@ function setState(next: State): void {
   // convention at every call site.
   if (next === "playing" && !contextRunning()) next = "blocked";
   state = next;
+  // No "playing" label: a moving playhead already says it, and a word that
+  // only ever restates what is visible is a word in the way.
   const labels: Record<State, string> = {
-    idle: "ready",
-    rendering: "rendering",
-    playing: "playing",
+    idle: "",
+    rendering: "building\u2026",
+    playing: "",
     paused: "paused",
     buffering: "buffering",
     blocked: "tap play to start audio",
     error: "stopped",
   };
   elState.textContent = labels[next];
+  if (next === "playing") startSpectrum();
+  else if (spectrumRaf === 0) clearSpectrum();
   elGenerate.textContent = track ? "REROLL" : "GENERATE";
   elGenerate.disabled = false;
   elPlay.disabled = !track;
@@ -1182,41 +1405,74 @@ window.addEventListener("hashchange", () => {
 // ------------------------------------------------------------------ boot ---
 
 readHash();
+// A shared link carries the whole track in eight characters, so following one
+// should land on that track rather than on an empty page with the seed typed
+// in. Rendering starts; playback still waits for a tap, as it must.
+const arrivedWithSeed = seed !== "";
 if (!seed) seed = newSeed();
 elSeed.value = seed;
 buildWords();
 buildDebug();
 setState("idle");
 drawScope();
+if (arrivedWithSeed) generate();
 
 elGenerate.addEventListener("click", () => {
   // Synchronously, while the gesture is still live: iOS will not start a
   // context later, and "later" is where progressive playback lives.
   unlockAudio();
+  // REROLL is now the only generate action, so it has to draw the new seed
+  // that the deleted dice icon used to draw. The first press plays whatever
+  // seed the URL or the boot gave us; every press after that is "another one".
+  if (track) {
+    seed = newSeed();
+    animateSeed(seed);
+  }
   generate();
 });
 elPlay.addEventListener("click", togglePlay);
-elDice.addEventListener("click", () => {
-  seed = newSeed();
-  elSeed.value = seed;
-  for (const k of Object.keys(locks)) delete locks[k];
-  if (track) renderLanes(track.info);
-  writeHash();
-});
+
+// The seed is an input, not a readout. Typing or pasting one and pressing
+// enter reproduces someone else's track exactly, which is the whole point of
+// a seed and was previously only reachable by editing the URL.
 elSeed.addEventListener("change", () => {
-  const v = elSeed.value.trim().toUpperCase();
-  if (v) {
+  const v = normaliseSeedInput(elSeed.value);
+  if (v.length >= 3) {
     seed = v;
+    elSeed.value = v;
     writeHash();
+    unlockAudio();
+    generate();
   } else {
     elSeed.value = seed;
   }
 });
+elSeed.addEventListener("focus", () => elSeed.select());
+
+elShare.addEventListener("click", () => {
+  void shareSeed();
+});
+elRetry.addEventListener("click", () => {
+  seed = newSeed();
+  animateSeed(seed);
+  unlockAudio();
+  generate();
+});
 elTech.addEventListener("toggle", () => {
   drawScope(track ? currentSample() : -1);
 });
-elWav.addEventListener("click", downloadWav);
-elStems.addEventListener("click", requestStems);
+elWav.addEventListener("click", () => {
+  elDlMenu.open = false;
+  downloadWav();
+});
+elStems.addEventListener("click", () => {
+  elDlMenu.open = false;
+  requestStems();
+});
+// a menu that stays open over the thing it acted on is a menu in the way
+document.addEventListener("click", (e) => {
+  if (elDlMenu.open && !elDlMenu.contains(e.target as Node)) elDlMenu.open = false;
+});
 
 window.addEventListener("resize", () => {
   drawScope(track ? currentSample() : -1);
@@ -1243,8 +1499,13 @@ document.addEventListener("visibilitychange", () => {
   );
 });
 window.addEventListener("hashchange", () => {
+  const was = seed;
   readHash();
   elSeed.value = seed;
+  // A hash change is someone arriving on a shared link while the page is
+  // already open. Updating the field without rendering would leave the seed
+  // and the audio disagreeing, which is the one thing a seed must never do.
+  if (seed !== was) generate();
 });
 
 document.addEventListener("keydown", (e) => {

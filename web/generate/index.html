@@ -23,6 +23,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/jetbrains-mono-medium.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -52,41 +53,53 @@
       <div class="ruler" id="ruler" aria-hidden="true"></div>
       <div class="nowbar">
         <span class="nowname" id="nowname">&nbsp;</span>
-        <span class="nowtimes"><b id="time">00:00</b> / <span id="duration">--:--</span> &nbsp; <span id="statelabel">ready</span></span>
+        <span class="nowtimes"><span id="statelabel" class="statelabel"></span><b id="time">00:00</b> / <span id="duration">--:--</span></span>
       </div>
 
+      <pre class="spectrum" id="spectrum" aria-hidden="true"></pre>
+
       <div class="transport">
-        <button type="button" id="generate" class="primary">GENERATE</button>
         <button type="button" id="play" class="icon" aria-label="Play" disabled>&#9654;</button>
-        <div class="serial">
-          <label for="seed">seed</label>
-          <input id="seed" type="text" spellcheck="false" autocomplete="off"
-                 aria-describedby="seedhelp" value="">
-          <button type="button" id="dice" class="icon" aria-label="Generate a new random seed">&#8635;</button>
-        </div>
+        <button type="button" id="generate" class="primary">GENERATE</button>
+
+        <details class="menu" id="dlmenu">
+          <summary id="download" aria-label="Download this track">DOWNLOAD</summary>
+          <div class="menupanel">
+            <button type="button" id="wav">full mix (wav)</button>
+            <button type="button" id="stems">six parts (zip)</button>
+            <p class="own">The audio you generate is yours &mdash; including commercially.</p>
+          </div>
+        </details>
+
+        <button type="button" id="share" class="secondary">SHARE</button>
       </div>
-      <p class="sr" id="seedhelp">The seed determines the track. The same seed always produces the same audio.</p>
+
+      <div class="serial">
+        <label for="seed">seed</label>
+        <input id="seed" type="text" spellcheck="false" autocomplete="off"
+               autocapitalize="characters" aria-describedby="seedhelp" value="">
+      </div>
+      <p class="sr" id="seedhelp">The seed determines the track. The same seed always produces the same audio. Type or paste one to reproduce someone else&rsquo;s track.</p>
+
+      <p class="ondevice">rendered on your device &middot; nothing uploaded</p>
 
       <div class="problem" id="problem" hidden>
         <b>The render stopped.</b>
         <p id="problemtext"></p>
+        <button type="button" id="retry" class="secondary">try another seed</button>
       </div>
 
-      <p class="stamp" id="stamp">no track yet</p>
+      <p class="stamp" id="stamp">press generate to hear one</p>
 
       <h2 class="sr">Parts</h2>
       <div class="lanes" id="lanes"></div>
+      <p class="hint" id="hint" hidden>tap a part to keep it, then reroll</p>
 
       <h2 class="sr">Sound</h2>
       <div class="words" id="words"></div>
 
-      <div class="files">
-        <button type="button" id="wav" disabled>WAV</button>
-        <button type="button" id="stems" disabled>STEMS</button>
-      </div>
-
       <details class="tech" id="tech">
-        <summary>technical readout</summary>
+        <summary>details</summary>
         <div class="techbody">
           <dl id="techlist"></dl>
         </div>
@@ -104,6 +117,6 @@
 </main>
 
 <script type="module" src="/generate/app.js"></script>
-<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="//gc.zgo.at/count.js"></script>
+<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>

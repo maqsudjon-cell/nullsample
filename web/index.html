@@ -25,6 +25,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/fonts/jetbrains-mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/jetbrains-mono-medium.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
 <script type="application/ld+json">
 {
@@ -67,7 +68,7 @@
     <div class="inner herobar">
       <button type="button" id="heroplay" class="primary">&#9654;&nbsp; HEAR IT</button>
       <a class="ghost cta" id="herolink" href="/generate/">MAKE ONE</a>
-      <span class="herostat"><b id="heroseed">&nbsp;</b><span id="herometa"></span></span>
+      <span class="herostat"><b id="heroseed">&nbsp;</b><span id="herometa">&nbsp;</span></span>
       <span class="herotime" id="herotime">00:00 / 00:00</span>
       <audio id="heroaudio" preload="none"></audio>
     </div>
@@ -115,6 +116,16 @@
 
   <section class="band">
     <div class="inner">
+      <ul class="points claims">
+        <li>Nothing to license. Nobody to sue you.</li>
+        <li>A seed reproduces a track exactly &mdash; ask for changes, not for luck.</li>
+        <li>Six parts, separate, because they were never mixed.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
       <h2>The code, and what it makes</h2>
       <div id="clips"></div>
     </div>
@@ -124,9 +135,10 @@
     <div class="inner">
       <h2>Made for</h2>
       <ul class="points tight">
-        <li>Game developers who need a loop and its stems.</li>
-        <li>Video and podcast makers who need no content claims.</li>
-        <li>Streamers who need music that survives a VOD.</li>
+        <li><b>Game audio</b> &mdash; a loop and its stems, dropped into the build.</li>
+        <li><b>Film &amp; video</b> &mdash; original music, no content claims.</li>
+        <li><b>Streaming</b> &mdash; tracks that survive a VOD.</li>
+        <li><b>Podcasts</b> &mdash; beds generated on your machine, yours the moment they exist.</li>
       </ul>
     </div>
   </section>
@@ -141,7 +153,7 @@
   <section class="band cta-band">
     <div class="inner">
       <a class="primary cta" href="/generate/">MAKE ONE</a>
-      <p class="fine">Free, no account, rendered on your device.</p>
+      <p class="fine">The audio you generate is yours. Free, no account, rendered on your device.</p>
     </div>
     <nav class="ticker" aria-label="Demo seeds"><div class="tickrow" id="tickrow"></div></nav>
   </section>
@@ -153,6 +165,6 @@
 </main>
 
 <script type="module" src="/landing.js"></script>
-<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="//gc.zgo.at/count.js"></script>
+<script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>

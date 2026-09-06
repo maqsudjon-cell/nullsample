@@ -20,14 +20,18 @@
   src: url("/fonts/jetbrains-mono-regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: swap;
+  /* `optional`, not `swap`: both faces are preloaded, so they are almost
+     always ready in time - and when they are not, the page stays in the
+     fallback rather than reflowing every card footer under the reader.
+     `swap` was costing 0.13 of cumulative layout shift. */
+  font-display: optional;
 }
 @font-face {
   font-family: "JetBrains Mono";
   src: url("/fonts/jetbrains-mono-medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
 }
 
 :root {
@@ -159,6 +163,10 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); }
   transform: translateX(-0.5px);
 }
 .ruler .tick.live { border-left-color: var(--flare); height: 10px; }
+/* Boundaries tick in as the render reaches them, so the structure arrives with
+   the audio rather than all at once ahead of it. */
+.ruler .tick[data-shown="false"] { opacity: 0; }
+.ruler .tick[data-shown="true"] { opacity: 1; transition: opacity 140ms linear; }
 .ruler .playhead { position: absolute; top: 0; height: 10px; border-left: 1px solid var(--flare); }
 
 /* ------------------------------------------------------------- transport - */
@@ -195,7 +203,82 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
 .primary:active:not(:disabled) { background: var(--flare); color: var(--void); }
 .primary:disabled { color: var(--dim); border-color: var(--line); background: transparent; }
 
-.icon { flex: none; width: 46px; padding: 0; }
+/* The pause square used to be shorter than the primary action beside it, which
+   read as an afterthought rather than the other half of the transport. */
+.icon { flex: none; width: 56px; height: 56px; padding: 0; font-size: var(--t-lead); }
+
+/* Secondary actions: outlined in --line-hi, never in accent. Download and
+   share sit on the same line as REROLL because taking the audio and passing it
+   on are two of the three things anyone came here to do. */
+.secondary, .menu > summary {
+  font: 400 var(--t-body) / 1 var(--mono);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line-hi);
+  height: 56px;
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  list-style: none;
+}
+.secondary:hover, .menu > summary:hover { border-color: var(--mute); }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu { position: relative; }
+.menu[open] > summary { border-color: var(--mute); background: var(--panel); }
+.menupanel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 15rem;
+  background: var(--raise);
+  border: 1px solid var(--line-hi);
+  padding: 6px;
+}
+.menupanel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  height: 44px;
+  padding: 0 10px;
+  color: var(--text);
+}
+.menupanel button:hover:not(:disabled) { background: var(--panel); color: var(--bright); }
+/* The most commercially valuable sentence on the page, at the moment it
+   matters rather than in a footer nobody reads. */
+.own {
+  margin: 6px 0 2px;
+  padding: 0 10px;
+  color: var(--mute);
+  font-size: var(--t-micro);
+  line-height: 1.5;
+}
+
+.ondevice {
+  margin: 12px 0 0;
+  /* --mute, not --dim: --dim is 3.19:1 on the ground and this is body text.
+     The same trap the ticker links fell into. */
+  color: var(--mute);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------- spectrum -
+   Real analyser data or nothing: an idle loop here would be the one lie that
+   undercuts a product whose whole claim is that the audio is computed. */
+.spectrum {
+  margin: 10px 0 0;
+  min-height: 4.2em;
+  font: 400 var(--t-micro) / 1.05 var(--mono);
+  color: var(--dim);
+  white-space: pre;
+  overflow: hidden;
+  letter-spacing: 0.06em;
+}
+.spectrum::first-line { color: var(--flare-dim); }
 
 /* ------------------------------------------------------------------ seed - */
 
@@ -220,34 +303,64 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
   letter-spacing: 0.14em;
   padding: 0;
 }
-.serial .icon { border: 0; width: 34px; color: var(--mute); height: 34px; }
-.serial .icon:hover { color: var(--flare); }
+.serial { margin-top: 14px; }
+.serial input::placeholder { color: var(--dim); }
 
 /* ------------------------------------------------------------------ stamp -
-   Tempo, key, length. Sample rate, bar count and form name are engine
-   internals and live behind the technical toggle. */
+   Tempo and length. Key, scale, bar count, sample rate, form name and per-bus
+   levels are all engine internals and live behind `details`. */
 
 .stamp { margin: 18px 0 0; color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 
 /* ----------------------------------------------------------------- buses - */
 
 .lanes { margin: 24px 0 0; }
+/* The whole lane is the target. Six grey bars with a 3-pixel glyph beside them
+   were not discoverable as anything; a row you tap that then reads `keeping`
+   needs no explanation. Kept and unkept must be legible from arm's length, so
+   they differ in colour, weight and an explicit word - never in hue, which is
+   reserved: --flare marks the kept lanes and nothing else here. */
 .lane {
   display: grid;
-  grid-template-columns: 26px 74px 1fr;
+  grid-template-columns: 74px 1fr 4.6rem;
   align-items: center;
   gap: 12px;
-  padding: 5px 0;
+  padding: 7px 0;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  height: auto;
+  cursor: pointer;
 }
-.lock { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; }
-.lock::before { content: ""; display: block; width: 3px; height: 16px; background: var(--line-hi); }
-.lock:hover::before { background: var(--mute); }
-.lock[aria-pressed="true"]::before { background: var(--flare); }
-.lock:focus-visible { outline: 2px solid var(--flare); outline-offset: 1px; }
-.lane .name { color: var(--mute); font-size: var(--t-micro); }
-.lane[data-locked="true"] .name { color: var(--text); }
+.lane:hover { border-bottom-color: var(--line-hi); }
+.lane:focus-visible { outline: 2px solid var(--flare); outline-offset: 2px; }
+/* Addendum 10 asks unkept lanes to recede to --dim. --dim is 3.19:1 against
+   the ground, which fails AA for text, so the label recedes to --mute and the
+   receding is carried by the strip and the `keeping` marker instead - the
+   kept/unkept contrast stays obvious from arm's length either way. */
+.lane .name { color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 .lane canvas { display: block; width: 100%; height: 16px; }
-.lane .db { color: var(--dim); font-size: var(--t-micro); text-align: right; }
+.lane .keepmark {
+  color: var(--flare);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-align: right;
+  visibility: hidden;
+}
+.lane[data-keep="true"] .name { color: var(--bright); }
+.lane[data-keep="true"] .keepmark { visibility: visible; }
+.lane[data-keep="true"] { border-bottom-color: var(--flare-dim); }
+
+/* Shown once, after the first track finishes, and gone for good after the
+   first keep. */
+.hint {
+  margin: 10px 0 0;
+  color: var(--mute);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
 
 /* --------------------------------------------------------------- sliders - */
 
@@ -337,6 +450,7 @@ table.tracks td a:hover { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ruler .tick[data-shown] { opacity: 1; transition: none; }
   * { transition: none !important; animation: none !important; }
 }
 
@@ -399,7 +513,19 @@ table.tracks td a:hover { text-decoration: underline; }
   letter-spacing: 0.14em;
 }
 .ghost:hover { border-color: var(--mute); color: var(--bright); }
-.herostat { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-micro); color: var(--mute); }
+/* Both lines exist from parse. #herometa was empty until the manifest landed,
+   so filling it added a second line to this column, grew the hero bar, and
+   pushed the whole page down once - which is where the landing page's
+   cumulative layout shift was coming from. */
+.herostat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-micro);
+  color: var(--mute);
+  min-height: 2.6em;
+  justify-content: center;
+}
 .herostat b { color: var(--text); font-weight: 500; letter-spacing: 0.12em; font-size: var(--t-body); }
 .herotime { margin-left: auto; color: var(--mute); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
 
@@ -421,6 +547,10 @@ table.tracks td a:hover { text-decoration: underline; }
 .cards { padding: 60px 0 0; }
 .cardgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .card { background: var(--raise); padding: 0; overflow: hidden; }
+/* A controls-less <audio> still generates an inline box, so it can add a line
+   to the card and take it away again once the element initialises. Nothing
+   should be laid out for an element that renders nothing. */
+audio:not([controls]) { display: none; }
 .cardart { display: block; width: 100%; height: 190px; }
 .cardfoot {
   display: flex;
@@ -477,6 +607,11 @@ table.tracks td a:hover { text-decoration: underline; }
 a.primary { display: inline-block; text-decoration: none; line-height: 54px; }
 
 /* --------------------------------------------------------------- ticker - */
+
+/* Three claims, one line each. They earn their space by being the answers to
+   the three questions this product exists to answer. */
+.claims li { color: var(--text); }
+.claims li + li { margin-top: 6px; }
 
 .ticker { margin-top: 34px; overflow: hidden; border-top: 1px solid var(--line); padding: 12px 0; }
 .tickrow { display: flex; gap: 34px; width: max-content; animation: tick 46s linear infinite; }
