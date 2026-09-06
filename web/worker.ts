@@ -16,6 +16,14 @@ import { PEAKS_PER_CHUNK, type FromWorker, type PlanInfo, type ToWorker } from "
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 let currentGen = -1;
+/**
+ * Solo's own generation counter, deliberately separate from `currentGen`.
+ *
+ * A solo is an audition running alongside the mix, not instead of it: tapping
+ * a lane must cancel the previous solo without cancelling the render that is
+ * still streaming the full track behind it.
+ */
+let currentSolo = -1;
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   (self as unknown as Worker).postMessage(msg, transfer);
@@ -128,6 +136,48 @@ async function render(msg: Extract<ToWorker, { type: "render" }>): Promise<void>
   });
 }
 
+/**
+ * Renders one bus on its own and streams it, exactly like the main render.
+ *
+ * Batch-rendering a bus and handing it over whole costs 9-15 seconds - the
+ * master chain runs over the whole track whichever buses are playing, so
+ * `onlyBus` saves much less than it looks like it should. Streamed, the first
+ * chunk lands in about 100 ms because time to first sound does not depend on
+ * the length of the track.
+ *
+ * AUDITION ONLY. Nothing here reaches the download or the shared seed: those
+ * both go through `render` and `stems`, which know nothing about solo.
+ */
+async function solo(msg: Extract<ToWorker, { type: "solo" }>): Promise<void> {
+  const { preset, ranges } = getPreset("hyperpop");
+  const renderer = new TrackRenderer({
+    seed: msg.seed,
+    preset,
+    ranges,
+    sampleRate: msg.sampleRate,
+    words: msg.words,
+    locks: msg.locks as never,
+    onlyBus: msg.bus as never,
+  });
+  const chunk = renderer.chunkSize;
+  const L = new Float32Array(chunk);
+  const R = new Float32Array(chunk);
+
+  while (!renderer.done) {
+    if (currentSolo !== msg.gen) return;
+    const start = renderer.position;
+    const count = renderer.next(L, R);
+    if (count === 0) break;
+    const left = L.slice(0, count);
+    const right = R.slice(0, count);
+    const lb = left.buffer as ArrayBuffer;
+    const rb = right.buffer as ArrayBuffer;
+    post({ type: "soloChunk", gen: msg.gen, bus: msg.bus, start, count, left: lb, right: rb }, [lb, rb]);
+    await yieldToQueue();
+  }
+  if (currentSolo === msg.gen) post({ type: "soloDone", gen: msg.gen, bus: msg.bus });
+}
+
 async function stems(msg: Extract<ToWorker, { type: "stems" }>): Promise<void> {
   const { preset, ranges } = getPreset("hyperpop");
   const total = BUS_NAMES.length;
@@ -157,6 +207,21 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === "cancel") {
     currentGen = msg.gen;
+    return;
+  }
+  if (msg.type === "cancelSolo") {
+    currentSolo = msg.gen;
+    return;
+  }
+  if (msg.type === "solo") {
+    currentSolo = msg.gen;
+    solo(msg).catch((err: unknown) => {
+      post({
+        type: "error",
+        gen: msg.gen,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
     return;
   }
   currentGen = msg.gen;

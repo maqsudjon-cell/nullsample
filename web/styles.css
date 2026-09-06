@@ -346,39 +346,41 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
 /* ----------------------------------------------------------------- buses - */
 
 .lanes { margin: 24px 0 0; }
-/* The whole lane is the target. Six grey bars with a 3-pixel glyph beside them
-   were not discoverable as anything; a row you tap that then reads `keeping`
-   needs no explanation. Kept and unkept must be legible from arm's length, so
-   they differ in colour, weight and an explicit word - never in hue, which is
-   reserved: --flare marks the kept lanes and nothing else here. */
+/* A lane row does two things, so it is two buttons, not one row that guesses
+   from where you tapped. Left auditions the part on its own; right keeps it
+   through a reroll. Both are 44px targets and both say what they do before
+   they are pressed - `keep` sits there unpressed for the same reason the
+   soloed lane turns --flare after. */
 .lane {
   display: grid;
-  grid-template-columns: 74px 1fr 4.8rem;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 0;
-  width: 100%;
-  border: 0;
+  grid-template-columns: 1fr 4.8rem;
+  align-items: stretch;
   border-top: 1px solid var(--line);
-  background: transparent;
-  text-align: left;
-  height: auto;
-  cursor: pointer;
 }
 .lanes .lane:last-child { border-bottom: 1px solid var(--line); }
-.lane:hover { background: var(--raise); }
-.lane:active { background: var(--panel); }
-.lane:focus-visible { outline: 2px solid var(--flare); outline-offset: 2px; }
-/* --mute rather than the --dim Addendum 10 asked for. That started as a
-   contrast fix and the token has since been raised, so it stays only because
-   the lane NAME is the row's label while `keep` beside it is the quieter
-   instruction - and they should not be the same weight. */
+
+.lane-solo, .lane-keep {
+  display: grid;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  height: auto;
+  cursor: pointer;
+  text-align: left;
+}
+.lane-solo { grid-template-columns: 74px 1fr; gap: 12px; }
+.lane-keep { justify-items: end; padding-right: 2px; }
+.lane-solo:hover, .lane-keep:hover { background: var(--raise); }
+.lane-solo:active, .lane-keep:active { background: var(--panel); }
+.lane-solo:focus-visible, .lane-keep:focus-visible { outline: 2px solid var(--flare); outline-offset: -2px; }
+
 .lane .name { color: var(--mute); font-size: var(--t-micro); letter-spacing: 0.04em; }
 .lane canvas { display: block; width: 100%; height: 16px; }
+
 /* Always present: `keep` before, `keeping` after. The word sitting there
-   unpressed is what teaches the interaction - the hint is now reinforcement
-   rather than the only signal there is one. */
+   unpressed is what teaches the interaction. */
 .lane .keepmark {
   color: var(--dim);
   font-size: var(--t-micro);
@@ -389,6 +391,13 @@ button:disabled { color: var(--dim); border-color: var(--line); cursor: default;
 .lane[data-keep="true"] .keepmark { color: var(--flare); }
 .lane[data-keep="true"] { border-top-color: var(--flare-dim); }
 .lane[data-keep="true"] + .lane { border-top-color: var(--flare-dim); }
+
+/* Soloed: this lane is the only thing playing, so it is the only thing lit.
+   Everything else recedes rather than disappearing - you still need to see
+   what you would be switching to. */
+.lane[data-solo="true"] .name { color: var(--flare); }
+.lane[data-muted="true"] { opacity: 0.42; }
+.lane[data-muted="true"] .name { color: var(--dim); }
 
 /* Shown once, after the first track finishes, and gone for good after the
    first keep. */
@@ -634,7 +643,7 @@ audio:not([controls]) { display: none; }
   font-size: var(--t-micro);
   transition: opacity 200ms linear;
 }
-.lanelabels span { color: var(--mute); }
+.lanelabels span { color: var(--dim); }
 .lanelabels span[data-active="true"] { color: var(--flare); }
 .cardfoot {
   display: flex;

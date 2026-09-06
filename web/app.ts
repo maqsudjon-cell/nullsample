@@ -78,6 +78,32 @@ let analyser: AnalyserNode | null = null;
 let analyserBuf: Float32Array | null = null;
 /** Set when the context stops running while we believed we were playing. */
 let needsGesture = false;
+
+/**
+ * Solo: the audition layer.
+ *
+ * A soloed bus is a second, parallel render of one bus that playback reads
+ * instead of the mix. It exists ONLY to let someone hear a part on its own.
+ *
+ * It must never reach the product. DOWNLOAD always writes the full mix or the
+ * six stems, and a shared seed always reproduces the full mix - both go
+ * through paths that know nothing about this. If you are here to wire solo
+ * into a render, a download or a share link: don't. It is an audition aid.
+ */
+interface Audition {
+  left: Float32Array;
+  right: Float32Array;
+  filled: number;
+  complete: boolean;
+}
+let solo: { bus: string; audio: Audition; started: boolean } | null = null;
+/** Solo's own generation counter, so switching lanes cancels the last one. */
+let soloGen = 0;
+
+/** What the scheduler reads: the soloed bus if there is one, otherwise the mix. */
+function auditioned(): Audition | null {
+  return solo ? solo.audio : track;
+}
 /** how much of the track has been rendered, 0..1, for the assembly animation */
 let assembled = 0;
 let seedAnim = 0;
@@ -235,7 +261,13 @@ function ensureWorker(): Worker {
 }
 
 function onWorkerMessage(msg: FromWorker): void {
-  if ("gen" in msg && msg.gen !== gen) return; // a cancelled render still talking
+  // Solo carries its own counter, so it has to be matched against its own -
+  // the render guard below would drop every solo chunk on the floor.
+  if (msg.type === "soloChunk" || msg.type === "soloDone") {
+    if (msg.gen !== soloGen) return;
+  } else if ("gen" in msg && msg.gen !== gen) {
+    return; // a cancelled render still talking
+  }
   switch (msg.type) {
     case "ready":
       break;
@@ -251,6 +283,12 @@ function onWorkerMessage(msg: FromWorker): void {
         track.busPeaks = msg.stats.busPeaks;
       }
       onRenderComplete();
+      break;
+    case "soloChunk":
+      appendSoloChunk(msg.gen, msg.start, msg.count, msg.left, msg.right);
+      break;
+    case "soloDone":
+      if (msg.gen === soloGen && solo) solo.audio.complete = true;
       break;
     case "stem":
       onStem(msg.bus, msg.wav, msg.index, msg.total);
@@ -272,6 +310,7 @@ function generate(): void {
   stopPlayback();
   // The waveform clears and redraws as the new track arrives. This is the
   // action people repeat most, so it should feel like something happening.
+  clearSolo();
   track = null;
   assembled = 0;
   shownSection = "";
@@ -582,20 +621,22 @@ async function beginPlayback(fromSample: number): Promise<void> {
 /** Schedules every whole chunk that exists and has not been scheduled yet. */
 function scheduleReady(): void {
   if (!track || !ctx || !contextRunning()) return;
+  const src0 = auditioned();
+  if (!src0) return;
   const ac = ctx;
   const sr = track.info.sampleRate;
   const chunk = track.info.chunkSize;
-  while (scheduledSamples < track.filled) {
-    const count_ = Math.min(chunk, track.filled - scheduledSamples);
+  while (scheduledSamples < src0.filled) {
+    const count_ = Math.min(chunk, src0.filled - scheduledSamples);
     // only schedule a whole chunk unless this is the tail of a finished track
-    if (count_ < chunk && !track.complete) break;
+    if (count_ < chunk && !src0.complete) break;
 
     // The buffer keeps the engine's 44.1 kHz rate whatever the device runs at;
     // the source node resamples. The downloaded file must never depend on the
     // hardware, so the audio is not resampled before it is stored.
     const buf = ac.createBuffer(2, count_, sr);
-    const l = track.left.subarray(scheduledSamples, scheduledSamples + count_);
-    const r = track.right.subarray(scheduledSamples, scheduledSamples + count_);
+    const l = src0.left.subarray(scheduledSamples, scheduledSamples + count_);
+    const r = src0.right.subarray(scheduledSamples, scheduledSamples + count_);
     buf.copyToChannel(l as Float32Array<ArrayBuffer>, 0);
     buf.copyToChannel(r as Float32Array<ArrayBuffer>, 1);
 
@@ -623,7 +664,10 @@ function scheduleReady(): void {
         `nullsample: chunk scheduled in the past (when=${when.toFixed(3)} now=${ac.currentTime.toFixed(3)})`,
       );
     }
-    src.start(when);
+    // A negative `when` is a RangeError, and an exception here kills the pump
+    // and takes playback with it. Clamping keeps a stale anchor to a glitch
+    // rather than a stop; the warning above still says it happened.
+    src.start(Math.max(0, when));
     probe.chunksScheduled++;
 
     // Hold the reference until the node actually ends. A source that is
@@ -688,7 +732,8 @@ function pumpOnce(): void {
   const pos = currentSample();
 
   if (state === "playing") {
-    if (track.complete && pos >= track.info.totalSamples - 1) {
+    const src0 = auditioned();
+    if (src0 && src0.complete && pos >= track.info.totalSamples - 1) {
       // Loop rather than stop dead. A track that ends in silence with no next
       // action loses the visitor at the exact moment they were listening.
       stopSources();
@@ -700,7 +745,7 @@ function pumpOnce(): void {
     const aheadSeconds = (scheduledSamples - pos) / sr;
     // The render fell behind the playhead. Stop cleanly and wait for enough
     // audio rather than letting the output gap.
-    if (!track.complete && aheadSeconds < UNDERRUN_MARGIN) {
+    if (src0 && !src0.complete && aheadSeconds < UNDERRUN_MARGIN) {
       stopSources();
       anchorSample = Math.max(0, pos);
       setState("buffering");
@@ -710,9 +755,15 @@ function pumpOnce(): void {
   }
 
   if (state === "buffering") {
-    const ahead = (track.filled - anchorSample) / sr;
-    if (ahead >= PREBUFFER_SECONDS || track.complete) {
-      void beginPlayback(Math.min(anchorSample, track.filled));
+    // The audition source, not the mix. Reading track.filled here meant that
+    // while a bus was soloed the recovery saw a fully rendered mix, declared
+    // itself ready and started a second playback over the top of the solo -
+    // and would happily resume at a position the solo had not reached yet.
+    const src1 = auditioned();
+    if (!src1) return;
+    const ahead = (src1.filled - anchorSample) / sr;
+    if (ahead >= PREBUFFER_SECONDS || src1.complete) {
+      void beginPlayback(Math.min(anchorSample, src1.filled));
     }
   }
 }
@@ -1016,21 +1067,28 @@ function renderLanes(info: PlanInfo): void {
     elLanes.innerHTML = info.buses
       .map((bus) => {
         const label = BUS_LABELS[bus] ?? bus;
-        // "keep" rather than "lock": lock-and-reroll is the one thing the
-        // model-based competitors structurally cannot do, and it was sitting
-        // on screen as six grey bars with no affordance and a word nobody
-        // reaches for. A lane you tap that then reads `keeping` needs no
-        // explanation at all.
-        return `<button type="button" class="lane" data-bus="${bus}" data-keep="false"
-            aria-pressed="false" aria-label="Keep ${label} when you reroll">
-          <span class="name">${label}</span>
-          <canvas data-bus="${bus}" aria-hidden="true"></canvas>
-          <span class="keepmark"></span>
-        </button>`;
+        // Two tap zones on one row. The left - name and activity - auditions
+        // the part on its own; the right keeps it through a reroll. Both are
+        // real buttons at 44px, because a row that does two things must say
+        // which half does which.
+        return `<div class="lane" data-bus="${bus}" data-keep="false" data-solo="false">
+          <button type="button" class="lane-solo" data-bus="${bus}" aria-pressed="false"
+            aria-label="Hear ${label} on its own">
+            <span class="name">${label}</span>
+            <canvas data-bus="${bus}" aria-hidden="true"></canvas>
+          </button>
+          <button type="button" class="lane-keep" data-bus="${bus}" aria-pressed="false"
+            aria-label="Keep ${label} when you reroll">
+            <span class="keepmark"></span>
+          </button>
+        </div>`;
       })
       .join("");
-    for (const b of Array.from(elLanes.querySelectorAll<HTMLButtonElement>(".lane"))) {
+    for (const b of Array.from(elLanes.querySelectorAll<HTMLButtonElement>(".lane-keep"))) {
       b.addEventListener("click", () => toggleLock(b.dataset.bus ?? ""));
+    }
+    for (const b of Array.from(elLanes.querySelectorAll<HTMLButtonElement>(".lane-solo"))) {
+      b.addEventListener("click", () => toggleSolo(b.dataset.bus ?? ""));
     }
   }
   for (const bus of info.buses) {
@@ -1039,7 +1097,11 @@ function renderLanes(info: PlanInfo): void {
     const kept = locks[bus] !== undefined;
     if (lane) {
       lane.dataset.keep = String(kept);
-      lane.setAttribute("aria-pressed", String(kept));
+      lane.dataset.solo = String(solo?.bus === bus);
+      // any lane recedes while another is soloed
+      lane.dataset.muted = String(solo !== null && solo.bus !== bus);
+      lane.querySelector(".lane-keep")?.setAttribute("aria-pressed", String(kept));
+      lane.querySelector(".lane-solo")?.setAttribute("aria-pressed", String(solo?.bus === bus));
       // The word is there before anything is tapped. `keeping` only appearing
       // after a tap meant nothing on screen ever said a tap was possible -
       // the lanes read as a readout, which is what they looked like.
@@ -1072,8 +1134,11 @@ function drawLane(bus: string, info: PlanInfo): void {
   g.clearRect(0, 0, w, h);
   const css = getComputedStyle(document.documentElement);
   const line = css.getPropertyValue("--line").trim();
+  // The soloed lane's bars take the accent: it is the one thing sounding, and
+  // Addendum 3's rule is that --flare at full strength marks exactly that.
+  const soloed = solo?.bus === bus;
   const locked = locks[bus] !== undefined;
-  const active = locked
+  const active = soloed || locked
     ? css.getPropertyValue("--flare").trim()
     : css.getPropertyValue("--line-hi").trim();
   const total = info.totalSamples;
@@ -1093,6 +1158,93 @@ function drawLane(bus: string, info: PlanInfo): void {
     if (drawn <= 0) continue;
     g.fillRect(x, y - 3, drawn, 8);
   }
+}
+
+/**
+ * Turns solo on for a bus, off, or over to a different one.
+ *
+ * Entering solo restarts from the top of the track. A soloed bus is rendered
+ * from sample zero like any other render, so continuing from the playhead
+ * would mean waiting for the render to reach it - about four seconds at the
+ * middle of a track, against roughly 300 ms from the start. Leaving solo does
+ * keep the position, because the mix is already rendered that far.
+ */
+function toggleSolo(bus: string): void {
+  if (!track) return;
+  const leaving = solo !== null && solo.bus === bus;
+  const pos = currentSample();
+
+  // Whatever happens next, the previous solo render is finished with.
+  soloGen++;
+  ensureWorker().postMessage({ type: "cancelSolo", gen: soloGen });
+
+  if (leaving) {
+    solo = null;
+    renderLanes(track.info);
+    stopPlayback();
+    // The mix is rendered this far already, so it can pick up where the solo
+    // left off rather than starting over.
+    const resume = Math.min(pos, Math.max(0, track.filled - 1));
+    scheduledSamples = resume;
+    void beginPlayback(resume);
+    count("solo off");
+    return;
+  }
+
+  solo = {
+    bus,
+    started: false,
+    audio: {
+      left: new Float32Array(track.info.totalSamples),
+      right: new Float32Array(track.info.totalSamples),
+      filled: 0,
+      complete: false,
+    },
+  };
+  renderLanes(track.info);
+  // stopPlayback, not stopSources: leaving the pump running would let it
+  // schedule against the OLD anchor while the new source has nothing in it -
+  // which computed a negative `when` and threw out of the audio path.
+  stopPlayback();
+  scheduledSamples = 0;
+  anchorSample = 0;
+  setState("buffering");
+  announce(`Playing ${BUS_LABELS[bus] ?? bus} on its own.`);
+  ensureWorker().postMessage({
+    type: "solo",
+    gen: soloGen,
+    bus,
+    seed,
+    sampleRate: SAMPLE_RATE,
+    words,
+    locks,
+  });
+  count("solo");
+}
+
+/** A soloed chunk. Same shape as a mix chunk, into the audition buffer. */
+function appendSoloChunk(gen: number, start: number, count_: number, left: ArrayBuffer, right: ArrayBuffer): void {
+  if (gen !== soloGen || !solo || !track) return;
+  solo.audio.left.set(new Float32Array(left), start);
+  solo.audio.right.set(new Float32Array(right), start);
+  solo.audio.filled = start + count_;
+  // Start once, on the first chunk past the prebuffer. Gating on the
+  // "buffering" state alone would restart playback every time the underrun
+  // path re-entered that state, which stuttered the first quarter second.
+  if (!solo.started && solo.audio.filled / track.info.sampleRate >= PREBUFFER_SECONDS) {
+    solo.started = true;
+    void beginPlayback(0);
+  } else if (state === "playing" || state === "buffering") {
+    scheduleReady();
+  }
+}
+
+/** Solo is dropped whenever the track it belongs to goes away. */
+function clearSolo(): void {
+  if (solo === null) return;
+  soloGen++;
+  ensureWorker().postMessage({ type: "cancelSolo", gen: soloGen });
+  solo = null;
 }
 
 const HINT_KEY = "ns.kept";

@@ -44,7 +44,24 @@ export type ToWorker =
       words: Record<string, number>;
       locks: Record<string, string>;
     }
-  | { type: "cancel"; gen: number };
+  | {
+      /**
+       * Render one bus on its own, progressively, for audition only.
+       *
+       * It carries its own `gen` counter, separate from the main render's, so
+       * switching lanes cancels the previous solo without touching the mix
+       * that is still streaming behind it.
+       */
+      type: "solo";
+      gen: number;
+      bus: string;
+      seed: string;
+      sampleRate: number;
+      words: Record<string, number>;
+      locks: Record<string, string>;
+    }
+  | { type: "cancel"; gen: number }
+  | { type: "cancelSolo"; gen: number };
 
 export type FromWorker =
   | { type: "ready" }
@@ -60,6 +77,16 @@ export type FromWorker =
       peaks: ArrayBuffer;
     }
   | { type: "done"; gen: number; stats: RenderStatsInfo }
+  | {
+      type: "soloChunk";
+      gen: number;
+      bus: string;
+      start: number;
+      count: number;
+      left: ArrayBuffer;
+      right: ArrayBuffer;
+    }
+  | { type: "soloDone"; gen: number; bus: string }
   | { type: "stem"; gen: number; bus: string; index: number; total: number; wav: ArrayBuffer }
   | { type: "stemsDone"; gen: number }
   | { type: "error"; gen: number; message: string };
