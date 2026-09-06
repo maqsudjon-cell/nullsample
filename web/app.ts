@@ -217,6 +217,10 @@ function writeHash(): void {
   }
   const locked = Object.keys(locks);
   if (locked.length > 0) h.set("lock", locked.join(","));
+  // Keep #debug alive across rerolls. Rewriting the hash dropped it, so
+  // pressing REROLL on a phone and then reloading lost the readout - which is
+  // exactly the situation the readout exists for.
+  if (debugEnabled()) h.set("debug", "1");
   history.replaceState(null, "", `#${h.toString()}`);
 }
 
