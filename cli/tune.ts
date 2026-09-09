@@ -64,7 +64,7 @@ interface Cycle {
   at: string;
   batchId: string;
   rated: number;
-  scores: Record<Axis, number>;
+  scores: Record<Axis, number | null>;
   moved: Move[];
   skipped: { param: string; reason: string }[];
   discardedSessions: { session: string; agreement: number; reason: string }[];
@@ -132,11 +132,21 @@ for (const [trackId, scores] of trackScores) {
   if (rec) rows.push({ params: rec.params, scores });
 }
 
-const meanScores = {} as Record<Axis, number>;
+/**
+ * An axis nobody has rated is null, not zero.
+ *
+ * Zero is a score, and interest is only rated in pass 2 - so a cycle where
+ * pass 2 has not happened would record interest at 0.00, plot it on the
+ * progress chart as if the music were terrible, and feed a constant into the
+ * flat-trend check that would eventually stop the loop for the wrong reason.
+ */
+const meanScores = {} as Record<Axis, number | null>;
 for (const a of AXES) {
   const vals = rows.map((r) => r.scores[a]).filter((v): v is number => typeof v === "number");
-  meanScores[a] = vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+  meanScores[a] = vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
 }
+/** Axes that actually carry a score this cycle. */
+const ratedAxes = AXES.filter((a) => meanScores[a] !== null);
 
 // --- U1 + U2: reweight what has cleared the bar ----------------------------
 
@@ -236,12 +246,18 @@ if (failures.length > 0) {
 let stopped: string | undefined;
 const cycleNo = tuning.cycles.length + 1;
 if (cycleNo >= CYCLE_CAP) stopped = `cycle cap of ${CYCLE_CAP} reached`;
-if (AXES.every((a) => meanScores[a] >= TARGET_MEAN)) stopped = `every axis is at or above ${TARGET_MEAN}`;
+// All four axes must have been rated before "we are done" can mean anything.
+if (ratedAxes.length === AXES.length && AXES.every((a) => (meanScores[a] ?? 0) >= TARGET_MEAN)) {
+  stopped = `every axis is at or above ${TARGET_MEAN}`;
+}
 if (tuning.cycles.length >= FLAT_CYCLES) {
   const recent = tuning.cycles.slice(-FLAT_CYCLES);
-  const flat = AXES.every((a) => {
-    const vals = recent.map((c) => c.scores[a]).concat(meanScores[a]);
-    return Math.max(...vals) - Math.min(...vals) < FLAT_DELTA;
+  const flat = ratedAxes.length > 0 && ratedAxes.every((a) => {
+    const vals = recent
+      .map((c) => c.scores[a])
+      .concat(meanScores[a])
+      .filter((v): v is number => typeof v === "number");
+    return vals.length > 1 && Math.max(...vals) - Math.min(...vals) < FLAT_DELTA;
   });
   if (flat) stopped = `scores flat across ${FLAT_CYCLES} cycles`;
 }
@@ -264,7 +280,9 @@ const cycle: Cycle = {
 // --- report and write -------------------------------------------------------
 
 console.log(`\nCYCLE ${cycleNo} — ${rows.length} rated tracks from ${manifest.batchId}`);
-console.log(`  ${AXES.map((a) => `${a} ${meanScores[a].toFixed(2)}`).join("   ")}`);
+console.log(
+  `  ${AXES.map((a) => `${a} ${meanScores[a] === null ? "not rated" : meanScores[a]!.toFixed(2)}`).join("   ")}`,
+);
 console.log(`  self-agreement ${(selfAgreement * 100).toFixed(0)}%, ${dropped.size} session(s) discarded`);
 if (cycle.moved.length === 0) {
   console.log(`  no parameter cleared the confidence bar — nothing changed, which is the expected`);

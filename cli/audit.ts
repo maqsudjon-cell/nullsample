@@ -20,6 +20,7 @@
 
 import { writeFileSync } from "node:fs";
 import { createStereo, type Stereo } from "../core/buffer.ts";
+import { DROP_INTENSITY } from "../compose/arrange.ts";
 import { getPreset } from "../presets/index.ts";
 import type { RangesFile } from "../presets/types.ts";
 import { buildPlan } from "../render/plan.ts";
@@ -81,7 +82,15 @@ const { preset, ranges } = getPreset(presetName);
  * is still an order of magnitude cheaper than two full tracks per parameter.
  */
 function windowOf(plan: ReturnType<typeof buildPlan>): { from: number; until: number } {
-  const drop = plan.sections.find((s) => s.intensity >= 0.9) ?? plan.sections[0];
+  // DROP_INTENSITY, not 0.9: the `sustained` template peaks at 0.82, and the
+  // old test fell through to sections[0] - the intro - so every parameter was
+  // being audited against pads and fx on those seeds.
+  const drops = plan.sections.filter((s) => s.intensity >= DROP_INTENSITY);
+  let drop = drops[0];
+  if (!drop) {
+    drop = plan.sections[0];
+    for (const s of plan.sections) if (s.intensity > drop.intensity) drop = s;
+  }
   // from two seconds before the drop, through five seconds of it
   return {
     from: Math.max(0, drop.startSample - 2 * SR),

@@ -7,7 +7,13 @@
  * change that produced it.
  */
 
-interface CycleAxisScores { hook: number; punch: number; space: number; interest: number }
+/** null where an axis has not been rated yet - see cli/tune.ts. */
+interface CycleAxisScores {
+  hook: number | null;
+  punch: number | null;
+  space: number | null;
+  interest: number | null;
+}
 interface Move { param: string; from: number[]; to: number[]; axis: string; r: number; n: number }
 interface Cycle {
   cycle: number;
@@ -54,12 +60,21 @@ function drawTrend(cycles: Cycle[]): void {
     ctx.strokeStyle = COLOURS[i];
     ctx.lineWidth = 2;
     ctx.beginPath();
+    // An unrated axis leaves a gap rather than a line to zero: plotting "not
+    // rated" as a score would read as "rated terrible".
+    let drawing = false;
     cycles.forEach((cy, k) => {
+      const v = cy.scores[axis];
+      if (typeof v !== "number") {
+        drawing = false;
+        return;
+      }
       const x = pad + (k / n) * (w - pad * 2);
-      const v = cy.scores[axis] ?? 0;
       const y = h - pad - ((v - 1) / 4) * (h - pad * 2);
-      if (k === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      if (!drawing) {
+        ctx.moveTo(x, y);
+        drawing = true;
+      } else ctx.lineTo(x, y);
     });
     ctx.stroke();
   });
@@ -77,19 +92,30 @@ async function main(): Promise<void> {
   const last = cycles[cycles.length - 1];
   const rated = cycles.reduce((s, c) => s + c.rated, 0);
   const discarded = cycles.reduce((s, c) => s + c.discardedSessions.length, 0);
-  $("status").textContent = t.stopped
-    ? `Tuning complete — ${t.stopped}. ${cycles.length} cycles, ${rated} tracks rated.`
-    : `Cycle ${cycles.length}. ${rated} tracks rated, ${discarded} sessions discarded.${t.paused ? " Paused." : ""}`;
+  // "Cycle 0, 0 tracks rated" is a reading; "nothing has happened yet" is the
+  // truth. The file exists from the first build so the fetch never 404s, which
+  // means the empty case has to be handled here rather than in a catch.
+  $("status").textContent = cycles.length === 0
+    ? "No cycles have run yet."
+    : t.stopped
+      ? `Tuning complete — ${t.stopped}. ${cycles.length} cycles, ${rated} tracks rated.`
+      : `Cycle ${cycles.length}. ${rated} tracks rated, ${discarded} sessions discarded.${t.paused ? " Paused." : ""}`;
 
   drawTrend(cycles);
   $("legend").innerHTML = AXES
-    .map((a, i) => `<span style="color:${COLOURS[i]}">${a}${last ? ` ${last.scores[a].toFixed(2)}` : ""}</span>`)
+    .map((a, i) => {
+      const v = last ? last.scores[a] : undefined;
+      const shown = typeof v === "number" ? ` ${v.toFixed(2)}` : last ? " —" : "";
+      return `<span style="color:${COLOURS[i]}">${a}${shown}</span>`;
+    })
     .join("   ");
 
   const moved = $("moved");
   const moves = last?.moved ?? [];
   if (moves.length === 0) {
-    moved.innerHTML = `<li>Nothing cleared the confidence bar this cycle.</li>`;
+    moved.innerHTML = cycles.length === 0
+      ? `<li>Nothing yet.</li>`
+      : `<li>Nothing cleared the confidence bar this cycle.</li>`;
   } else {
     moved.innerHTML = moves
       .map((m) => `<li><b>${m.param}</b> — ${m.axis}, r=${m.r.toFixed(2)} over ${m.n} tracks</li>`)

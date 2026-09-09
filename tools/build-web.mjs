@@ -86,10 +86,17 @@ try {
 } catch {
   console.warn("  no rating batch published - run npm run batch -- --publish");
 }
+// Always publish a tuning file, even before the first cycle. Letting the
+// progress page fetch a 404 and catch it worked, but a failed request is
+// logged by the browser whatever the page does with it - and a console error
+// on a page whose whole job is to report health reads badly.
 try {
   cpSync(join(ROOT, "web/rate/tuning.json"), join(OUT, "rate", "tuning.json"));
 } catch {
-  /* no cycles have run yet */
+  writeFileSync(
+    join(OUT, "rate", "tuning.json"),
+    JSON.stringify({ cycles: [], paused: false }, null, 2),
+  );
 }
 
 for (const name of ["how-it-works", "tracks"]) {

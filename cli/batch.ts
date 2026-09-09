@@ -15,6 +15,25 @@ import { join } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 
 /**
+ * The section a measurement should be taken over.
+ *
+ * `intensity >= 0.9` with a fall back to sections[0] looks harmless and is
+ * not: the `sustained` template deliberately peaks at 0.82, so `find` returned
+ * undefined and every measurement landed on the INTRO - pads and fx, no drums,
+ * no 808. That reported two of sixteen tracks as losing 3 dB in mono below
+ * 250 Hz when both are mono to three decimal places at their actual peak.
+ * DROP_INTENSITY is the shared threshold; the loudest section is the fallback.
+ */
+function loudestSection<T extends { intensity: number }>(sections: readonly T[]): T {
+  const drops = sections.filter((s) => s.intensity >= DROP_INTENSITY);
+  if (drops.length > 0) return drops[0];
+  let best = sections[0];
+  for (const s of sections) if (s.intensity > best.intensity) best = s;
+  return best;
+}
+
+
+/**
  * Encodes a buffer to MP3 with `lame`.
  *
  * A build-time tool, not a project dependency: the engine and the site never
@@ -29,6 +48,7 @@ import { getPreset } from "../presets/index.ts";
 import { analyseLoudness } from "../render/loudness.ts";
 import { renderTrack } from "../render/track.ts";
 import { encodeWav } from "../render/wav.ts";
+import { DROP_INTENSITY } from "../compose/arrange.ts";
 import { makeRng } from "../core/rng.ts";
 import type { Stereo } from "../core/buffer.ts";
 import type { RangesFile } from "../presets/types.ts";
@@ -182,7 +202,7 @@ if (rebuild) {
       seed: t.seed, preset, ranges: (t.explore ? uniform : m.ranges) as typeof ranges, sampleRate,
     });
     const p2 = res.plan;
-    const drop = p2.sections.find((x) => x.intensity >= 0.9) ?? p2.sections[0];
+    const drop = loudestSection(p2.sections);
     const from = Math.max(0, drop.startSample - EXCERPT_LEAD_IN * sampleRate);
     const len = Math.min(res.audio.length - from, EXCERPT_SECONDS * sampleRate);
     const clip: Stereo = {
@@ -225,7 +245,7 @@ for (let i = 0; i < count; i++) {
 
   // Mono compatibility is measured over the loudest drop, because that is
   // where the supersaw is widest and where a cancellation would cost the most.
-  const drop = p.sections.find((x) => x.intensity >= 0.9) ?? p.sections[0];
+  const drop = loudestSection(p.sections);
   const mono = analyse(result.audio, drop.startSample, Math.min(8 * sampleRate, result.audio.length - drop.startSample));
   const monoFlags: string[] = [];
   for (let b = 0; b < mono.monoLossDb.length; b++) {
@@ -255,7 +275,7 @@ for (let i = 0; i < count; i++) {
     choices: p.choices,
   });
   if (publish) {
-    const drop = p.sections.find((x) => x.intensity >= 0.9) ?? p.sections[0];
+    const drop = loudestSection(p.sections);
     const from = Math.max(0, drop.startSample - EXCERPT_LEAD_IN * sampleRate);
     const len = Math.min(result.audio.length - from, EXCERPT_SECONDS * sampleRate);
     const clip: Stereo = {
