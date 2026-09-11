@@ -871,3 +871,41 @@ body.rate main {
 @media (prefers-reduced-motion: reduce) {
   .rate-start { box-shadow: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   /drums - one screenful. Tempo and length sit together on one row; the
+   lanes and word sliders are the same components as /generate.
+   --------------------------------------------------------------------------- */
+
+.drumctl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 16px 0 0;
+  flex-wrap: wrap;
+}
+.bpm { display: flex; align-items: center; gap: 10px; color: var(--mute); font-size: var(--t-micro); }
+.bpm input {
+  font: 500 var(--t-read) / 1 var(--mono);
+  width: 5.2rem;
+  height: 44px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--line-hi);
+  padding: 0 4px;
+  letter-spacing: 0.06em;
+}
+.bpm input:focus { outline: none; border-bottom-color: var(--flare); }
+.bars { display: flex; align-items: center; gap: 6px; }
+.bars button { width: 44px; height: 44px; padding: 0; }
+.bars button[aria-checked="true"] { border-color: var(--flare); color: var(--bright); background: var(--flare-glow); }
+.barsunit { color: var(--dim); font-size: var(--t-micro); margin-left: 4px; }
+
+/* the pattern row keeps but does not solo: a pattern has no sound of its own */
+.lane-pattern .lane-static { cursor: default; }
+.lane-pattern .lane-static:hover { background: transparent; }
+.lanefill { display: block; height: 2px; background: var(--line); align-self: center; }
+.lane[data-solo="true"] .lanefill { background: var(--flare); height: 3px; }
+.lane[data-keep="true"] .lanefill { background: var(--flare-dim); }

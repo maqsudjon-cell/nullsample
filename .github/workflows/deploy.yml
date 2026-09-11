@@ -70,7 +70,12 @@ jobs:
 
       - name: Rebuild any missing batch audio
         if: steps.batchid.outputs.id != 'none'
-        run: npm run batch -- --rebuild
+        run: |
+          if [ "$(node -p "require('./web/rate/batch/manifest.json').kind || 'tracks'")" = "drums" ]; then
+            npm run drumbatch -- --rebuild
+          else
+            npm run batch -- --rebuild
+          fi
 
       - name: brand assets
         run: npm run brand

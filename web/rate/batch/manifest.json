@@ -1,8 +1,9 @@
 {
-  "batchId": "p-3-6",
+  "batchId": "d-drums-3-50",
+  "kind": "drums",
   "preset": "hyperpop",
   "rangesVersion": 3,
-  "createdAt": "2026-09-06T08:28:43.509Z",
+  "createdAt": "2026-09-11T10:46:40.889Z",
   "ranges": {
     "preset": "hyperpop",
     "version": 3,
@@ -619,70 +620,431 @@
   },
   "tracks": [
     {
-      "id": "t0001",
-      "seed": "p0001",
-      "excerpt": "t0001-x.mp3",
-      "full": "t0001-f.mp3",
-      "explore": true
+      "id": "d0001",
+      "seed": "d0001",
+      "excerpt": "d0001.mp3",
+      "full": "d0001.mp3",
+      "explore": false,
+      "bpm": 158
     },
     {
-      "id": "t0002",
-      "seed": "p0002",
-      "excerpt": "t0002-x.mp3",
-      "full": "t0002-f.mp3",
-      "explore": false
+      "id": "d0002",
+      "seed": "d0002",
+      "excerpt": "d0002.mp3",
+      "full": "d0002.mp3",
+      "explore": false,
+      "bpm": 160
     },
     {
-      "id": "t0003",
-      "seed": "p0003",
-      "excerpt": "t0003-x.mp3",
-      "full": "t0003-f.mp3",
-      "explore": false
+      "id": "d0003",
+      "seed": "d0003",
+      "excerpt": "d0003.mp3",
+      "full": "d0003.mp3",
+      "explore": false,
+      "bpm": 155
     },
     {
-      "id": "t0004",
-      "seed": "p0004",
-      "excerpt": "t0004-x.mp3",
-      "full": "t0004-f.mp3",
-      "explore": false
+      "id": "d0004",
+      "seed": "d0004",
+      "excerpt": "d0004.mp3",
+      "full": "d0004.mp3",
+      "explore": false,
+      "bpm": 155
     },
     {
-      "id": "t0005",
-      "seed": "p0005",
-      "excerpt": "t0005-x.mp3",
-      "full": "t0005-f.mp3",
-      "explore": false
+      "id": "d0005",
+      "seed": "d0005",
+      "excerpt": "d0005.mp3",
+      "full": "d0005.mp3",
+      "explore": false,
+      "bpm": 158
     },
     {
-      "id": "t0006",
-      "seed": "p0006",
-      "excerpt": "t0006-x.mp3",
-      "full": "t0006-f.mp3",
-      "explore": true
+      "id": "d0006",
+      "seed": "d0006",
+      "excerpt": "d0006.mp3",
+      "full": "d0006.mp3",
+      "explore": false,
+      "bpm": 152
+    },
+    {
+      "id": "d0007",
+      "seed": "d0007",
+      "excerpt": "d0007.mp3",
+      "full": "d0007.mp3",
+      "explore": false,
+      "bpm": 150
+    },
+    {
+      "id": "d0008",
+      "seed": "d0008",
+      "excerpt": "d0008.mp3",
+      "full": "d0008.mp3",
+      "explore": false,
+      "bpm": 153
+    },
+    {
+      "id": "d0009",
+      "seed": "d0009",
+      "excerpt": "d0009.mp3",
+      "full": "d0009.mp3",
+      "explore": false,
+      "bpm": 151
+    },
+    {
+      "id": "d0010",
+      "seed": "d0010",
+      "excerpt": "d0010.mp3",
+      "full": "d0010.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0011",
+      "seed": "d0011",
+      "excerpt": "d0011.mp3",
+      "full": "d0011.mp3",
+      "explore": false,
+      "bpm": 154
+    },
+    {
+      "id": "d0012",
+      "seed": "d0012",
+      "excerpt": "d0012.mp3",
+      "full": "d0012.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0013",
+      "seed": "d0013",
+      "excerpt": "d0013.mp3",
+      "full": "d0013.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0014",
+      "seed": "d0014",
+      "excerpt": "d0014.mp3",
+      "full": "d0014.mp3",
+      "explore": false,
+      "bpm": 160
+    },
+    {
+      "id": "d0015",
+      "seed": "d0015",
+      "excerpt": "d0015.mp3",
+      "full": "d0015.mp3",
+      "explore": false,
+      "bpm": 159
+    },
+    {
+      "id": "d0016",
+      "seed": "d0016",
+      "excerpt": "d0016.mp3",
+      "full": "d0016.mp3",
+      "explore": false,
+      "bpm": 150
+    },
+    {
+      "id": "d0017",
+      "seed": "d0017",
+      "excerpt": "d0017.mp3",
+      "full": "d0017.mp3",
+      "explore": false,
+      "bpm": 155
+    },
+    {
+      "id": "d0018",
+      "seed": "d0018",
+      "excerpt": "d0018.mp3",
+      "full": "d0018.mp3",
+      "explore": false,
+      "bpm": 152
+    },
+    {
+      "id": "d0019",
+      "seed": "d0019",
+      "excerpt": "d0019.mp3",
+      "full": "d0019.mp3",
+      "explore": false,
+      "bpm": 155
+    },
+    {
+      "id": "d0020",
+      "seed": "d0020",
+      "excerpt": "d0020.mp3",
+      "full": "d0020.mp3",
+      "explore": false,
+      "bpm": 154
+    },
+    {
+      "id": "d0021",
+      "seed": "d0021",
+      "excerpt": "d0021.mp3",
+      "full": "d0021.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0022",
+      "seed": "d0022",
+      "excerpt": "d0022.mp3",
+      "full": "d0022.mp3",
+      "explore": false,
+      "bpm": 151
+    },
+    {
+      "id": "d0023",
+      "seed": "d0023",
+      "excerpt": "d0023.mp3",
+      "full": "d0023.mp3",
+      "explore": false,
+      "bpm": 155
+    },
+    {
+      "id": "d0024",
+      "seed": "d0024",
+      "excerpt": "d0024.mp3",
+      "full": "d0024.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0025",
+      "seed": "d0025",
+      "excerpt": "d0025.mp3",
+      "full": "d0025.mp3",
+      "explore": false,
+      "bpm": 154
+    },
+    {
+      "id": "d0026",
+      "seed": "d0026",
+      "excerpt": "d0026.mp3",
+      "full": "d0026.mp3",
+      "explore": false,
+      "bpm": 159
+    },
+    {
+      "id": "d0027",
+      "seed": "d0027",
+      "excerpt": "d0027.mp3",
+      "full": "d0027.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0028",
+      "seed": "d0028",
+      "excerpt": "d0028.mp3",
+      "full": "d0028.mp3",
+      "explore": false,
+      "bpm": 160
+    },
+    {
+      "id": "d0029",
+      "seed": "d0029",
+      "excerpt": "d0029.mp3",
+      "full": "d0029.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0030",
+      "seed": "d0030",
+      "excerpt": "d0030.mp3",
+      "full": "d0030.mp3",
+      "explore": false,
+      "bpm": 151
+    },
+    {
+      "id": "d0031",
+      "seed": "d0031",
+      "excerpt": "d0031.mp3",
+      "full": "d0031.mp3",
+      "explore": false,
+      "bpm": 156
+    },
+    {
+      "id": "d0032",
+      "seed": "d0032",
+      "excerpt": "d0032.mp3",
+      "full": "d0032.mp3",
+      "explore": false,
+      "bpm": 155
+    },
+    {
+      "id": "d0033",
+      "seed": "d0033",
+      "excerpt": "d0033.mp3",
+      "full": "d0033.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0034",
+      "seed": "d0034",
+      "excerpt": "d0034.mp3",
+      "full": "d0034.mp3",
+      "explore": false,
+      "bpm": 160
+    },
+    {
+      "id": "d0035",
+      "seed": "d0035",
+      "excerpt": "d0035.mp3",
+      "full": "d0035.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0036",
+      "seed": "d0036",
+      "excerpt": "d0036.mp3",
+      "full": "d0036.mp3",
+      "explore": false,
+      "bpm": 153
+    },
+    {
+      "id": "d0037",
+      "seed": "d0037",
+      "excerpt": "d0037.mp3",
+      "full": "d0037.mp3",
+      "explore": false,
+      "bpm": 150
+    },
+    {
+      "id": "d0038",
+      "seed": "d0038",
+      "excerpt": "d0038.mp3",
+      "full": "d0038.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0039",
+      "seed": "d0039",
+      "excerpt": "d0039.mp3",
+      "full": "d0039.mp3",
+      "explore": false,
+      "bpm": 158
+    },
+    {
+      "id": "d0040",
+      "seed": "d0040",
+      "excerpt": "d0040.mp3",
+      "full": "d0040.mp3",
+      "explore": false,
+      "bpm": 154
+    },
+    {
+      "id": "d0041",
+      "seed": "d0041",
+      "excerpt": "d0041.mp3",
+      "full": "d0041.mp3",
+      "explore": false,
+      "bpm": 159
+    },
+    {
+      "id": "d0042",
+      "seed": "d0042",
+      "excerpt": "d0042.mp3",
+      "full": "d0042.mp3",
+      "explore": false,
+      "bpm": 154
+    },
+    {
+      "id": "d0043",
+      "seed": "d0043",
+      "excerpt": "d0043.mp3",
+      "full": "d0043.mp3",
+      "explore": false,
+      "bpm": 156
+    },
+    {
+      "id": "d0044",
+      "seed": "d0044",
+      "excerpt": "d0044.mp3",
+      "full": "d0044.mp3",
+      "explore": false,
+      "bpm": 153
+    },
+    {
+      "id": "d0045",
+      "seed": "d0045",
+      "excerpt": "d0045.mp3",
+      "full": "d0045.mp3",
+      "explore": false,
+      "bpm": 151
+    },
+    {
+      "id": "d0046",
+      "seed": "d0046",
+      "excerpt": "d0046.mp3",
+      "full": "d0046.mp3",
+      "explore": false,
+      "bpm": 152
+    },
+    {
+      "id": "d0047",
+      "seed": "d0047",
+      "excerpt": "d0047.mp3",
+      "full": "d0047.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0048",
+      "seed": "d0048",
+      "excerpt": "d0048.mp3",
+      "full": "d0048.mp3",
+      "explore": false,
+      "bpm": 157
+    },
+    {
+      "id": "d0049",
+      "seed": "d0049",
+      "excerpt": "d0049.mp3",
+      "full": "d0049.mp3",
+      "explore": false,
+      "bpm": 153
+    },
+    {
+      "id": "d0050",
+      "seed": "d0050",
+      "excerpt": "d0050.mp3",
+      "full": "d0050.mp3",
+      "explore": false,
+      "bpm": 154
     },
     {
       "id": "r01",
-      "seed": "p0005",
-      "excerpt": "t0005-x.mp3",
-      "full": "t0005-f.mp3",
-      "repeatOf": "t0005",
-      "explore": false
+      "seed": "d0022",
+      "excerpt": "d0022.mp3",
+      "full": "d0022.mp3",
+      "explore": false,
+      "bpm": 151,
+      "repeatOf": "d0022"
     },
     {
       "id": "r02",
-      "seed": "p0004",
-      "excerpt": "t0004-x.mp3",
-      "full": "t0004-f.mp3",
-      "repeatOf": "t0004",
-      "explore": false
+      "seed": "d0031",
+      "excerpt": "d0031.mp3",
+      "full": "d0031.mp3",
+      "explore": false,
+      "bpm": 156,
+      "repeatOf": "d0031"
     },
     {
       "id": "r03",
-      "seed": "p0006",
-      "excerpt": "t0006-x.mp3",
-      "full": "t0006-f.mp3",
-      "repeatOf": "t0006",
-      "explore": true
+      "seed": "d0006",
+      "excerpt": "d0006.mp3",
+      "full": "d0006.mp3",
+      "explore": false,
+      "bpm": 152,
+      "repeatOf": "d0006"
     }
   ]
 }

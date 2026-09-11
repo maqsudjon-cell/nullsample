@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generate a track — Nullsample</title>
-<meta name="description" content="Generate an original track from a seed. Synthesised in your browser from oscillators, noise and filters — no samples. Lock a bus, reroll the rest, download WAV or stems.">
-<link rel="canonical" href="https://nullsample.maqsudjon.com/generate/">
+<title>Drum loops, one-shots and MIDI — Nullsample</title>
+<meta name="description" content="Generate drum loops, one-shots and MIDI from a seed. Synthesised in your browser, no samples, nothing uploaded. Set the tempo, keep a kick, reroll the rest.">
+<link rel="canonical" href="https://nullsample.maqsudjon.com/drums/">
 <meta name="theme-color" content="#08090C">
 <meta name="color-scheme" content="dark">
-<meta property="og:title" content="Generate a track — Nullsample">
+<meta property="og:title" content="Drum loops from a seed — Nullsample">
 <meta property="og:description" content="Generate an original track from a seed, synthesised in your browser from code. No samples.">
 <meta property="og:image" content="https://nullsample.maqsudjon.com/og-default.png">
-<meta property="og:url" content="https://nullsample.maqsudjon.com/generate/">
+<meta property="og:url" content="https://nullsample.maqsudjon.com/drums/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nullsample">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Generate a track — Nullsample">
+<meta name="twitter:title" content="Drum loops from a seed — Nullsample">
 <meta name="twitter:description" content="Generate an original track from a seed, synthesised in your browser from code. No samples.">
 <meta name="twitter:image" content="https://nullsample.maqsudjon.com/og-default.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -37,8 +37,8 @@
   <span class="tag">zero samples</span>
   <nav>
     <a href="/">home</a>
-    <a href="/generate/" aria-current="page">generator</a>
-    <a href="/drums/">drums</a>
+    <a href="/generate/">generator</a>
+    <a href="/drums/" aria-current="page">drums</a>
     <a href="/how-it-works/">how it works</a>
     <a href="/tracks/">tracks</a>
   </nav>
@@ -46,77 +46,75 @@
 
 <main>
   <div class="scope bleed">
-    <canvas id="scope" role="img" aria-label="Waveform of the generated track, drawn as it renders"></canvas>
+    <canvas id="scope" role="img" aria-label="Waveform of the drum loop"></canvas>
   </div>
 
   <div class="bleed">
     <div class="inner">
-      <div class="ruler" id="ruler" aria-hidden="true"></div>
       <div class="nowbar">
         <button type="button" id="play" class="icon" aria-label="Play" disabled>&#9654;</button>
-        <span class="nowname" id="nowname">&nbsp;</span>
-        <span class="nowtimes"><span id="statelabel" class="statelabel"></span><b id="time">00:00</b> / <span id="duration">--:--</span></span>
+        <span class="nowname" id="nowname">drums</span>
+        <span class="nowtimes"><span id="statelabel" class="statelabel"></span><span id="loopinfo">&nbsp;</span></span>
       </div>
-
-      <pre class="spectrum" id="spectrum" aria-hidden="true"></pre>
 
       <button type="button" id="generate" class="primary">GENERATE</button>
 
       <div class="secondrow">
         <details class="menu" id="dlmenu">
-          <summary id="download" aria-label="Download this track">DOWNLOAD</summary>
+          <summary id="download" aria-label="Download this loop">DOWNLOAD</summary>
           <div class="menupanel">
-            <button type="button" id="wav" disabled>full mix (wav)</button>
-            <button type="button" id="stems" disabled>six parts (zip)</button>
+            <button type="button" id="dl-wav" disabled>loop (wav)</button>
+            <button type="button" id="dl-kit" disabled>one-shots + midi (zip)</button>
+            <button type="button" id="dl-midi" disabled>pattern (midi)</button>
             <p class="own">The audio you generate is yours &mdash; including commercially.</p>
           </div>
         </details>
         <button type="button" id="share" class="secondary">SHARE</button>
       </div>
 
+      <div class="drumctl">
+        <label class="bpm">
+          <span>BPM</span>
+          <input id="bpm" type="number" inputmode="numeric" min="80" max="180" step="1" value="150">
+        </label>
+        <div class="bars" role="radiogroup" aria-label="Loop length">
+          <button type="button" role="radio" data-bars="4" aria-checked="false">4</button>
+          <button type="button" role="radio" data-bars="8" aria-checked="true">8</button>
+          <button type="button" role="radio" data-bars="16" aria-checked="false">16</button>
+          <span class="barsunit">bars</span>
+        </div>
+      </div>
+
       <div class="serial">
         <label for="seed">seed</label>
         <input id="seed" type="text" spellcheck="false" autocomplete="off"
-               autocapitalize="characters" aria-describedby="seedhelp" value="">
+               autocapitalize="characters" value="">
       </div>
-      <p class="sr" id="seedhelp">The seed determines the track. The same seed always produces the same audio. Type or paste one to reproduce someone else&rsquo;s track.</p>
-
       <p class="ondevice">rendered on your device &middot; nothing uploaded</p>
 
       <div class="problem" id="problem" hidden>
         <b>The render stopped.</b>
         <p id="problemtext"></p>
-        <button type="button" id="retry" class="secondary">try another seed</button>
       </div>
-
-      <p class="stamp" id="stamp">press generate to hear one</p>
 
       <h2 class="sr">Parts</h2>
       <div class="lanes" id="lanes"></div>
-      <p class="hint" id="hint" hidden>tap a part to keep it, then reroll</p>
+      <p class="hint" id="hint" hidden>tap a part to hear it alone &middot; keep it, then reroll</p>
 
       <h2 class="sr">Sound</h2>
       <div class="words" id="words"></div>
 
-      <details class="tech" id="tech">
-        <summary><span>details</span><span class="techmark" aria-hidden="true"></span></summary>
-        <div class="techbody">
-          <dl id="techlist"></dl>
-        </div>
-      </details>
-
       <div class="sr" id="live" role="status" aria-live="polite"></div>
 
       <footer>
-        <p>Audio is synthesised on your device and never uploaded. Analytics are cookieless and
-        count page views only. <a href="/how-it-works/">How it works</a> ·
+        <p>Synthesised on your device and never uploaded. <a href="/generate/">Full tracks</a> &middot;
         <a href="https://github.com/maqsudjon-cell/nullsample">Source</a></p>
       </footer>
     </div>
   </div>
 </main>
 
-<script type="module" src="/generate/app.js"></script>
+<script type="module" src="/drums/drums.js"></script>
 <script data-goatcounter="https://nullsample.goatcounter.com/count" async defer src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>

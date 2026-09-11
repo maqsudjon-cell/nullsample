@@ -30,7 +30,8 @@
     "audit": "node cli/audit.ts",
     "effects": "node cli/effects.ts",
     "masking": "node cli/masking.ts",
-    "tune": "node cli/tune.ts"
+    "tune": "node cli/tune.ts",
+    "drumbatch": "node cli/drumbatch.ts"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

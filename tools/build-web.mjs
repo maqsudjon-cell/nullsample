@@ -39,6 +39,9 @@ await bundle("web/landing.ts", "landing.js");
 // private tooling, noindex, out of the sitemap
 mkdirSync(join(OUT, "rate"), { recursive: true });
 await bundle("web/rate.ts", "rate/rate.js");
+mkdirSync(join(OUT, "drums"), { recursive: true });
+await bundle("web/drums.ts", "drums/drums.js");
+await bundle("web/drums-worker.ts", "drums/drums-worker.js");
 await bundle("web/rate-progress.ts", "rate/progress.js");
 
 /**
@@ -80,6 +83,7 @@ try {
 }
 cpSync(join(ROOT, "web/fonts"), join(OUT, "fonts"), { recursive: true });
 page(join(ROOT, "web/rate/index.html"), join(OUT, "rate", "index.html"));
+page(join(ROOT, "web/drums/index.html"), join(OUT, "drums", "index.html"));
 page(join(ROOT, "web/rate/progress/index.html"), join(OUT, "rate", "progress", "index.html"));
 try {
   cpSync(join(ROOT, "web/rate/batch"), join(OUT, "rate", "batch"), { recursive: true });
@@ -124,6 +128,7 @@ const today = new Date().toISOString().slice(0, 10);
 const pages = [
   { loc: "/", priority: "1.0", changefreq: "weekly" },
   { loc: "/generate/", priority: "0.9", changefreq: "weekly" },
+  { loc: "/drums/", priority: "0.9", changefreq: "weekly" },
   { loc: "/how-it-works/", priority: "0.7", changefreq: "monthly" },
   { loc: "/tracks/", priority: "0.6", changefreq: "monthly" },
 ];

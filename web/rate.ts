@@ -31,6 +31,8 @@ interface RateTrack {
 }
 interface Manifest {
   batchId: string;
+  /** "drums": one short loop per entry, rated in a single pass */
+  kind?: "tracks" | "drums";
   preset: string;
   rangesVersion: number;
   createdAt: string;
@@ -192,13 +194,38 @@ function buildQueue(m: Manifest, pass2Ids: Set<string>): void {
   for (const t of p2) queue.push({ track: t, pass: 2 as const });
 }
 
+/**
+ * A drum loop is judged in one pass: the whole thing is the excerpt. The axis
+ * keys are the track ones, so narrow and tune correlate them unchanged; only
+ * the questions change, because "can you hum it" means nothing for a loop.
+ */
+const DRUM_AXES = ["punch", "space", "interest"] as const;
+const DRUM_QUESTIONS: Record<string, string> = {
+  punch: "Does it hit?",
+  space: "Can you hear each drum?",
+  interest: "Would you loop it?",
+};
+const isDrums = () => manifest?.kind === "drums";
+
 function currentAxes(): readonly Axis[] {
+  if (isDrums()) return DRUM_AXES;
   return queue[index]?.pass === 2 ? AXES_PASS2 : AXES_PASS1;
 }
 
 function renderAxes(): void {
   const form = $("axes");
   const axes = currentAxes();
+  if (isDrums()) {
+    for (const fs of Array.from(form.querySelectorAll("fieldset"))) {
+      const axis = fs.getAttribute("data-axis") ?? "";
+      const q = DRUM_QUESTIONS[axis];
+      const legend = fs.querySelector("legend");
+      if (q && legend && legend.textContent !== q) {
+        legend.textContent = q;
+        fs.querySelector(".rate-row")?.setAttribute("aria-label", q);
+      }
+    }
+  }
   for (const fs of Array.from(form.querySelectorAll("fieldset"))) {
     const axis = fs.getAttribute("data-axis") as Axis;
     fs.hidden = !axes.includes(axis);
@@ -255,7 +282,7 @@ function advance(skipped: boolean): void {
   index++;
   store.set(POS_KEY, { batchId: manifest.batchId, index, sessionId, at: 0 });
 
-  if (index === manifest.tracks.length) {
+  if (index === manifest.tracks.length && !isDrums()) {
     // pass 1 is done: rebuild the tail from what scored well
     const keep = new Set(manifest.tracks.filter((t) => meanPass1(t) >= PASS2_THRESHOLD).map((t) => t.id));
     const head = queue.slice(0, index);

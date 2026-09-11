@@ -228,73 +228,16 @@ const HOOK_BARS = 4;
 const BASS_REGISTER_LO = 24;
 const BASS_REGISTER_HI = 45;
 
-export function buildPlan(opts: PlanOptions): TrackPlan {
-  const seed = normaliseSeed(opts.seed);
-  const { preset, ranges, sampleRate } = opts;
-  const locks = opts.locks ?? {};
-  const words = opts.words ?? {};
-
-  // Locking any bus pins the structure: a locked bass line makes no sense over
-  // a key it was not written for.
-  const anyBusLocked = (Object.keys(locks) as (BusName | "structure")[]).some(
-    (k) => k !== "structure" && locks[k] !== undefined,
-  );
-  const structureSeed = locks.structure ?? (anyBusLocked ? (firstLock(locks) ?? seed) : seed);
-  const busSeed = (bus: BusName): string => locks[bus] ?? seed;
-
-  const structRng = makeRng(structureSeed).child("structure");
-  const sampler = new ParamSampler(structRng.child("params"), ranges, preset.words, words);
-
-  // --- tempo, key, chord loop --------------------------------------------
-  const tempo = sampler.num("tempo");
-  const samplesPerBar = Math.round((sampleRate * 4 * 60) / tempo);
-  const samplesPerStep = samplesPerBar / STEPS_PER_BAR;
-
-  const harmonyRng = structRng.child("harmony");
-  const tonicMidi = sampler.choice("key", preset.harmony.tonics);
-  const scaleName = sampler.choice("scale", preset.harmony.scales);
-  const degrees = sampler.choice("chords", preset.harmony.degreeSets);
-  const barsPerChord = sampler.int("barsPerChord");
-  const harmony = buildHarmony(harmonyRng, {
-    tonicMidi,
-    scaleName,
-    degrees,
-    voicings: preset.harmony.voicings,
-    barsPerChord,
-  });
-
-  // --- arrangement --------------------------------------------------------
-  const arrangement = buildArrangement(
-    structRng.child("arrangement"),
-    preset.arrangements,
-    preset.maxBars,
-  );
-  sampler.choices["arrangement"] = arrangement.templateName;
-
-  const bars = arrangement.totalBars;
-  // room for the last reverb tail and the release of the final notes
-  const tailSamples = Math.round(sampleRate * 2.5);
-  const totalSamples = bars * samplesPerBar + tailSamples;
-
-  const sections: SectionMark[] = arrangement.sections.map((s) => ({
-    name: s.name,
-    startSample: s.startBar * samplesPerBar,
-    endSample: (s.startBar + s.bars) * samplesPerBar,
-    intensity: s.intensity,
-    filterOpen: s.filterOpen,
-    gainDb: s.gainDb,
-  }));
-
-  // --- per-bus samplers ---------------------------------------------------
-  const mk = (bus: BusName) =>
-    new ParamSampler(makeRng(busSeed(bus)).child(bus).child("params"), ranges, preset.words, words);
-  const sDrums = mk("drums");
-  const sBass = mk("bass808");
-  const sLead = mk("lead");
-  const sArp = mk("arp");
-  const sPads = mk("pads");
-  const sFx = mk("fx");
-
+/**
+ * Builds a drum kit from a sampler.
+ *
+ * Shared by the full track and by /drums, and deliberately so: tuning the kit
+ * through the fast drum-loop rating pass has to improve the tracks too, which
+ * only holds if both surfaces construct the kit with the same code in the same
+ * draw order. Extracted verbatim from buildPlan - the sampler calls happen in
+ * exactly the order they always did, so no golden hash moves.
+ */
+export function sampleDrumKit(sDrums: ParamSampler): DrumParams {
   const drum: DrumParams = {
     kick: {
       startHz: sDrums.num("drums.kick.startHz"),
@@ -405,6 +348,78 @@ export function buildPlan(opts: PlanOptions): TrackPlan {
     drum.snare.toneDecay *= 1.6;
     drum.snare.noiseLowHz *= 1.4;
   }
+
+  return drum;
+}
+
+export function buildPlan(opts: PlanOptions): TrackPlan {
+  const seed = normaliseSeed(opts.seed);
+  const { preset, ranges, sampleRate } = opts;
+  const locks = opts.locks ?? {};
+  const words = opts.words ?? {};
+
+  // Locking any bus pins the structure: a locked bass line makes no sense over
+  // a key it was not written for.
+  const anyBusLocked = (Object.keys(locks) as (BusName | "structure")[]).some(
+    (k) => k !== "structure" && locks[k] !== undefined,
+  );
+  const structureSeed = locks.structure ?? (anyBusLocked ? (firstLock(locks) ?? seed) : seed);
+  const busSeed = (bus: BusName): string => locks[bus] ?? seed;
+
+  const structRng = makeRng(structureSeed).child("structure");
+  const sampler = new ParamSampler(structRng.child("params"), ranges, preset.words, words);
+
+  // --- tempo, key, chord loop --------------------------------------------
+  const tempo = sampler.num("tempo");
+  const samplesPerBar = Math.round((sampleRate * 4 * 60) / tempo);
+  const samplesPerStep = samplesPerBar / STEPS_PER_BAR;
+
+  const harmonyRng = structRng.child("harmony");
+  const tonicMidi = sampler.choice("key", preset.harmony.tonics);
+  const scaleName = sampler.choice("scale", preset.harmony.scales);
+  const degrees = sampler.choice("chords", preset.harmony.degreeSets);
+  const barsPerChord = sampler.int("barsPerChord");
+  const harmony = buildHarmony(harmonyRng, {
+    tonicMidi,
+    scaleName,
+    degrees,
+    voicings: preset.harmony.voicings,
+    barsPerChord,
+  });
+
+  // --- arrangement --------------------------------------------------------
+  const arrangement = buildArrangement(
+    structRng.child("arrangement"),
+    preset.arrangements,
+    preset.maxBars,
+  );
+  sampler.choices["arrangement"] = arrangement.templateName;
+
+  const bars = arrangement.totalBars;
+  // room for the last reverb tail and the release of the final notes
+  const tailSamples = Math.round(sampleRate * 2.5);
+  const totalSamples = bars * samplesPerBar + tailSamples;
+
+  const sections: SectionMark[] = arrangement.sections.map((s) => ({
+    name: s.name,
+    startSample: s.startBar * samplesPerBar,
+    endSample: (s.startBar + s.bars) * samplesPerBar,
+    intensity: s.intensity,
+    filterOpen: s.filterOpen,
+    gainDb: s.gainDb,
+  }));
+
+  // --- per-bus samplers ---------------------------------------------------
+  const mk = (bus: BusName) =>
+    new ParamSampler(makeRng(busSeed(bus)).child(bus).child("params"), ranges, preset.words, words);
+  const sDrums = mk("drums");
+  const sBass = mk("bass808");
+  const sLead = mk("lead");
+  const sArp = mk("arp");
+  const sPads = mk("pads");
+  const sFx = mk("fx");
+
+  const drum = sampleDrumKit(sDrums);
 
   const bassOctave = sBass.int("bass.octave");
   const bass: BassParams = {
