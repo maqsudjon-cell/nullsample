@@ -171,9 +171,14 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); }
   color: var(--bright);
   letter-spacing: -0.01em;
   line-height: 1.1;
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity 130ms ease, transform 130ms ease;
 }
-.nowname.swap { opacity: 0; transform: translateY(-5px); }
+/* The name travels with the playhead: out in the direction of travel, and the
+   next one follows it in from behind. Fast, no bounce. */
+.nowname.leaving { opacity: 0; transform: translateX(-14px); }
+.nowname[data-dir="back"].leaving { transform: translateX(14px); }
+.nowname.entering { opacity: 0; transform: translateX(14px); transition: none; }
+.nowname[data-dir="back"].entering { transform: translateX(-14px); }
 .nowtimes { margin-left: auto; color: var(--mute); font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
 .nowtimes b { color: var(--text); font-weight: 400; }
 
@@ -493,7 +498,11 @@ table.tracks td a:hover { text-decoration: underline; }
   :root { --edge: 16px; --t-read: 18px; }
   .scope { padding: 16px 0 6px; }
   .scope canvas { height: 30vh; min-height: 170px; }
-  .lane { grid-template-columns: 22px 58px 1fr; gap: 10px; }
+  /* Two children, not three: a stale three-column rule here gave .lane-solo a
+     22px track, which squeezed the name and left the activity canvas at zero
+     width - so on a phone the lane rows drew nothing at all, playhead included. */
+  .lane { grid-template-columns: 1fr 3.6rem; }
+  .lane-solo { grid-template-columns: 56px 1fr; gap: 10px; }
   .word { grid-template-columns: 58px 1fr 108px; gap: 10px; }
   nav { width: 100%; margin-left: 0; gap: 14px; }
   .primary { padding: 0 22px; letter-spacing: 0.1em; }
@@ -872,6 +881,19 @@ body.rate main {
   .rate-start { box-shadow: none; }
 }
 
+/* Touch answers in the same frame, before any audio or render work starts.
+   A control that waits on work feels slow even when the work is fast, and the
+   press state is the only thing that tells you the tap landed. */
+.lane-solo:active, .lane-keep:active,
+.primary:active, .secondary:active, .icon:active,
+.bars button:active, .menu > summary:active {
+  transform: scale(0.985);
+  transition: transform 60ms ease-out, background 60ms ease-out;
+}
+/* soloed, but its audio has not arrived yet */
+.lane[data-pending="true"] .name { opacity: 0.55; }
+input[type="range"] { touch-action: pan-y; }
+
 /* ---------------------------------------------------------------------------
    /drums - one screenful. Tempo and length sit together on one row; the
    lanes and word sliders are the same components as /generate.
@@ -909,3 +931,22 @@ body.rate main {
 .lanefill { display: block; height: 2px; background: var(--line); align-self: center; }
 .lane[data-solo="true"] .lanefill { background: var(--flare); height: 3px; }
 .lane[data-keep="true"] .lanefill { background: var(--flare-dim); }
+
+/* The one-shot rows travel out of the waveform, so they must be free to sit
+   outside the panel while they are on their way in. */
+.shots {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 10px 0;
+  border-top: 1px solid var(--line);
+}
+.shots li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 var(--t-micro) / 1.9 var(--mono);
+  color: var(--mute);
+  will-change: transform, opacity;
+}
+.shots li b { color: var(--dim); font-weight: 400; }
+.menupanel { overflow: visible; }

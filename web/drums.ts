@@ -116,6 +116,7 @@ function onMessage(msg: FromDrumWorker): void {
     buffers.set(msg.only ?? "full", buf);
     if (!msg.only) {
       hasLoop = true;
+      firstHit = msg.firstHit ?? {};
       for (const id of ["dl-wav", "dl-kit", "dl-midi"]) ($(id) as HTMLButtonElement).disabled = false;
       ($("play") as HTMLButtonElement).disabled = false;
       $("generate").textContent = "REROLL";
@@ -304,6 +305,66 @@ function toggleSolo(g: Group): void {
   send({ type: "loop", ...request(), only: g });
 }
 
+// ------------------------------------------------------------- one-shots -
+
+const VOICES = ["kick", "snare", "clap", "hatClosed", "hatOpen", "rim", "tom"] as const;
+const VOICE_LABEL: Record<string, string> = {
+  kick: "kick", snare: "snare", clap: "clap", hatClosed: "closed hat",
+  hatOpen: "open hat", rim: "rim", tom: "tom",
+};
+
+/** Where each voice first hits, as a fraction of the loop. */
+let firstHit: Record<string, number> = {};
+
+/**
+ * The one-shot rows come out of the loop.
+ *
+ * Each row starts at the point in the waveform above where that drum first
+ * hits and travels to its place in the list. It makes visible the thing that
+ * is actually true and that no sample library can claim: these seven files came
+ * out of this render, not out of a folder.
+ *
+ * The offsets are real page geometry - the scope canvas's own rect - not a
+ * percentage of the row, so the row genuinely starts under its hit.
+ */
+function renderShots(): void {
+  const host = $("shots");
+  const present = VOICES.filter((v) => firstHit[v] !== undefined);
+  if (present.length === 0) {
+    host.innerHTML = "";
+    return;
+  }
+  host.innerHTML = present
+    .map((v) =>
+      `<li data-voice="${v}"><span>${VOICE_LABEL[v]}</span><b>${(firstHit[v] * 100).toFixed(0)}%</b></li>`
+    )
+    .join("");
+  const rows = Array.from(host.querySelectorAll<HTMLElement>("li"));
+  if (reducedMotion) return; // final state, drawn directly
+
+  const scope = $("scope").getBoundingClientRect();
+  const from = rows.map((li) => {
+    const r = li.getBoundingClientRect();
+    const at = firstHit[li.dataset.voice ?? ""] ?? 0;
+    return {
+      li,
+      dx: scope.left + at * scope.width - (r.left + r.width / 2),
+      dy: scope.top + scope.height / 2 - (r.top + r.height / 2),
+    };
+  });
+  for (const f of from) {
+    f.li.style.transform = `translate(${f.dx.toFixed(1)}px, ${f.dy.toFixed(1)}px) scale(.82)`;
+    f.li.style.opacity = "0";
+  }
+  requestAnimationFrame(() => {
+    for (const f of from) {
+      f.li.style.transition = "transform 320ms cubic-bezier(.2,.7,.3,1), opacity 220ms ease-out";
+      f.li.style.transform = "translate(0, 0) scale(1)";
+      f.li.style.opacity = "1";
+    }
+  });
+}
+
 // ----------------------------------------------------------------- words -
 
 function buildWords(): void {
@@ -452,6 +513,9 @@ $("share").addEventListener("click", async () => {
     $("share").textContent = "COPY IT";
     setTimeout(() => { $("share").textContent = "SHARE"; }, 1600);
   }
+});
+($("dlmenu") as HTMLDetailsElement).addEventListener("toggle", () => {
+  if (($("dlmenu") as HTMLDetailsElement).open) renderShots();
 });
 document.addEventListener("click", (e) => {
   const m = $("dlmenu") as HTMLDetailsElement;

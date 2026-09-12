@@ -95,6 +95,8 @@ interface Audition {
   right: Float32Array;
   filled: number;
   complete: boolean;
+  /** [peak, rms] per bucket, the same shape the worker sends for the mix */
+  peaks: Float32Array;
 }
 let solo: { bus: string; audio: Audition; started: boolean } | null = null;
 /** Solo's own generation counter, so switching lanes cancels the last one. */
@@ -103,6 +105,134 @@ let soloGen = 0;
 /** What the scheduler reads: the soloed bus if there is one, otherwise the mix. */
 function auditioned(): Audition | null {
   return solo ? solo.audio : track;
+}
+
+// ----------------------------------------------------------------- morph ---
+
+/**
+ * The waveform is one object that changes shape, never a clear and a redraw.
+ *
+ * Both states are reduced to the same array - one [peak, rms] pair per pixel
+ * column - so a reroll, a solo and a section arriving are all the same
+ * operation: interpolate every column from where it is to where it should be.
+ * Two screenshots taken mid-transition look like one object caught moving
+ * rather than two different pages.
+ */
+const MORPH_MS = 400;
+/** eased: fast out of the old shape, settling into the new one */
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+let shownCols: Float32Array | null = null;
+/**
+ * The shape to keep in columns the new render has not reached yet.
+ *
+ * A reroll or a solo renders left to right, so for the first few hundred
+ * milliseconds most of the new shape does not exist. Morphing toward it
+ * regardless means collapsing to a flat line and growing back - a fade, which
+ * is the thing Addendum 13 rules out. Carrying the outgoing shape in the
+ * columns that have no replacement yet means the waveform rewrites itself
+ * across, and is never empty at any point.
+ */
+let carryCols: Float32Array | null = null;
+let morphFrom: Float32Array | null = null;
+let morphTo: Float32Array | null = null;
+let morphStart = 0;
+let colCount = 0;
+
+/**
+ * Reduces an audition source to one [peak, rms] pair per pixel column.
+ *
+ * Column space, not bucket space: two tracks have different bar counts and so
+ * different bucket counts, and nothing can morph between arrays of different
+ * lengths. Columns are always the width of the canvas.
+ */
+function columnsOf(src: Audition | null, cols: number): Float32Array {
+  const out = new Float32Array(cols * 2);
+  if (!src || !track || cols <= 0) return out;
+  const total = track.info.totalSamples;
+  const chunk = track.info.chunkSize;
+  const buckets = Math.ceil(total / chunk) * PEAKS_PER_CHUNK;
+  const filled = Math.ceil((src.filled / chunk) * PEAKS_PER_CHUNK);
+  for (let x = 0; x < cols; x++) {
+    const from = Math.floor((x / cols) * buckets);
+    const to = Math.max(from + 1, Math.floor(((x + 1) / cols) * buckets));
+    let pk = 0;
+    let rms = 0;
+    let n = 0;
+    for (let b = from; b < to && b < filled; b++) {
+      const p = src.peaks[b * 2];
+      const r = src.peaks[b * 2 + 1];
+      if (p > pk) pk = p;
+      rms += r;
+      n++;
+    }
+    if (n > 0) {
+      out[x * 2] = pk;
+      out[x * 2 + 1] = rms / n;
+    } else if (carryCols && carryCols.length === out.length) {
+      // nothing rendered here yet: hold what is on screen
+      out[x * 2] = carryCols[x * 2];
+      out[x * 2 + 1] = carryCols[x * 2 + 1];
+    }
+  }
+  return out;
+}
+
+/** Holds the shape now on screen in every column a new render has not reached. */
+function carryShownShape(): void {
+  carryCols = shownCols && colCount > 0 ? shownCols.slice() : null;
+}
+
+/** Starts a morph from whatever is on screen toward the given shape. */
+function morphTowards(target: Float32Array): void {
+  if (reducedMotion || !shownCols || shownCols.length !== target.length) {
+    shownCols = target;
+    morphTo = null;
+    morphFrom = null;
+    return;
+  }
+  // Already moving: aim the same journey at the newer shape rather than
+  // starting again, so a render arriving in twenty chunks is one continuous
+  // movement and not twenty eased restarts.
+  if (morphTo) {
+    morphTo = target;
+    return;
+  }
+  morphFrom = shownCols.slice();
+  morphTo = target;
+  morphStart = performance.now();
+  runMorph();
+}
+
+/** Advances the morph. Returns true while it is still moving. */
+function stepMorph(now: number): boolean {
+  if (!morphTo || !morphFrom || !shownCols) return false;
+  const t = Math.min(1, (now - morphStart) / MORPH_MS);
+  const k = ease(t);
+  for (let i = 0; i < shownCols.length; i++) {
+    shownCols[i] = morphFrom[i] + (morphTo[i] - morphFrom[i]) * k;
+  }
+  if (t >= 1) {
+    shownCols = morphTo;
+    morphTo = null;
+    morphFrom = null;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Points the waveform at whatever should be on screen now.
+ *
+ * `settle` morphs; without it the shape is adopted at once, which is what a
+ * progressive render wants for the columns it has already drawn.
+ */
+function retarget(settle: boolean): void {
+  if (!track || colCount <= 0) return;
+  const target = columnsOf(auditioned(), colCount);
+  if (settle) morphTowards(target);
+  else if (!morphTo) shownCols = target;
+  else morphTo = target;
 }
 /** how much of the track has been rendered, 0..1, for the assembly animation */
 let assembled = 0;
@@ -282,13 +412,20 @@ function onWorkerMessage(msg: FromWorker): void {
         track.complete = true;
         track.busPeaks = msg.stats.busPeaks;
       }
+      // every column has a replacement now, so stop carrying the old shape
+      carryCols = null;
+      retarget(true);
       onRenderComplete();
       break;
     case "soloChunk":
       appendSoloChunk(msg.gen, msg.start, msg.count, msg.left, msg.right);
       break;
     case "soloDone":
-      if (msg.gen === soloGen && solo) solo.audio.complete = true;
+      if (msg.gen === soloGen && solo) {
+        solo.audio.complete = true;
+        carryCols = null;
+        retarget(true);
+      }
       break;
     case "stem":
       onStem(msg.bus, msg.wav, msg.index, msg.total);
@@ -308,9 +445,11 @@ function generate(): void {
   clearProblem();
   gen++;
   stopPlayback();
-  // The waveform clears and redraws as the new track arrives. This is the
-  // action people repeat most, so it should feel like something happening.
   clearSolo();
+  // The outgoing shape stays on screen and is overwritten column by column as
+  // the new render sweeps across it. This is the action people repeat most, so
+  // it is the one that most needs to read as one object changing.
+  carryShownShape();
   track = null;
   assembled = 0;
   shownSection = "";
@@ -346,6 +485,9 @@ function startTrack(info: PlanInfo): void {
   };
   renderStamp(info);
   renderRuler(info);
+  // Nothing to morph into yet - the new track has no samples. The shape from
+  // before the reroll is still on screen and stays there until the first chunk
+  // of the new one arrives to replace part of it.
   // show the opening section immediately, rather than waiting for the first
   // animation frame - the name is part of the track appearing, not of playback
   highlightMark(0);
@@ -369,6 +511,9 @@ function appendChunk(
   track.peaks.set(new Float32Array(peaks), index * PEAKS_PER_CHUNK * 2);
   track.filled = start + count_;
   assembled = track.filled / track.info.totalSamples;
+  // Morph toward the track as each bar lands rather than appending to an empty
+  // canvas: the shape rewrites itself into the new one.
+  retarget(true);
   drawScope();
   // The wait is unavoidable, so spend it showing the track being built rather
   // than on a progress bar: the waveform draws in section by section, the
@@ -773,9 +918,28 @@ function draw(): void {
     const pos = state === "playing" ? currentSample() : anchorSample;
     elTime.textContent = clock(pos / track.info.sampleRate);
     highlightMark(pos);
+    stepMorph(performance.now());
     drawScope(pos);
+    drawLanePlayhead(pos);
   }
   raf = requestAnimationFrame(draw);
+}
+
+/**
+ * A morph can start while nothing is playing - a reroll from a paused track,
+ * or a solo. The transport clock is not running then, so the morph needs its
+ * own frames, and it stops the moment the shape has settled.
+ */
+let morphRaf = 0;
+function runMorph(): void {
+  if (morphRaf !== 0) return;
+  const tick = () => {
+    const moving = stepMorph(performance.now());
+    drawScope(track && state === "playing" ? currentSample() : anchorSample);
+    if (moving) morphRaf = requestAnimationFrame(tick);
+    else morphRaf = 0;
+  };
+  morphRaf = requestAnimationFrame(tick);
 }
 
 function stopSources(): void {
@@ -864,14 +1028,32 @@ function drawScope(playhead = -1): void {
   }
 
   if (!track) {
-    // An invitation to act, not a placeholder: a flat line waiting for a
-    // signal, which is exactly what the product is about to put there.
+    // A reroll nulls the track while the next plan is on its way. Dropping to
+    // the flat line here is what made every reroll read as a cut: the shape
+    // vanished for a couple of hundred milliseconds before the new one grew.
+    // Keep whatever is on screen until there is something to morph into.
     g.strokeStyle = line;
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(gutter, mid + 0.5);
     g.lineTo(w, mid + 0.5);
     g.stroke();
+    if (shownCols && colCount > 0) {
+      const px0 = gutter;
+      g.fillStyle = text;
+      for (let x = 0; x < colCount; x++) {
+        const pk = shownCols[x * 2];
+        const rms = shownCols[x * 2 + 1];
+        if (pk <= 0 && rms <= 0) continue;
+        const peakAmp = Math.max(0.6, pk * (mid - 12));
+        g.globalAlpha = 0.3;
+        g.fillRect(px0 + x, mid - peakAmp, 1, peakAmp * 2);
+        const rmsAmp = Math.max(0.6, rms * (mid - 12) * 1.6);
+        g.globalAlpha = 1;
+        g.fillRect(px0 + x, mid - rmsAmp, 1, rmsAmp * 2);
+      }
+      g.globalAlpha = 1;
+    }
     return;
   }
 
@@ -911,23 +1093,33 @@ function drawScope(playhead = -1): void {
   }
 
   // --- the trace ---------------------------------------------------------
-  // Newly arrived bars are drawn in --flare and settle to --text, so the
-  // drawing-in IS the render rather than an animation played over it. Peak is
-  // faint with rms filled inside: peak alone is a solid block on a limited
-  // master and the arrangement disappears.
-  const freshFrom = reducedMotion ? filledBuckets : Math.max(0, filledBuckets - PEAKS_PER_CHUNK * 2);
-  const bw = Math.max(1, plotW / buckets);
-  const bodyW = bw > 1.2 ? bw - 0.4 : bw;
-  for (let b = 0; b < filledBuckets && b < buckets; b++) {
-    const x = gutter + (b / buckets) * plotW;
-    const fresh = b >= freshFrom;
-    const peakAmp = Math.max(0.6, track.peaks[b * 2] * height);
+  // Drawn from the morphing column array, so a reroll or a solo changes this
+  // shape rather than replacing it. Newly rendered columns are drawn in
+  // --flare and settle to --text, so the drawing-in IS the render.
+  const cols = Math.max(1, Math.floor(plotW));
+  if (colCount !== cols) {
+    colCount = cols;
+    shownCols = columnsOf(auditioned(), cols);
+    morphTo = null;
+    morphFrom = null;
+  }
+  if (!shownCols) shownCols = columnsOf(auditioned(), cols);
+  const freshFromCol = reducedMotion
+    ? cols
+    : Math.max(0, Math.floor((filledBuckets / buckets) * cols) - Math.ceil((PEAKS_PER_CHUNK * 2 * cols) / buckets));
+  for (let x = 0; x < cols; x++) {
+    const pk = shownCols[x * 2];
+    const rms = shownCols[x * 2 + 1];
+    if (pk <= 0 && rms <= 0) continue;
+    const px = gutter + x;
+    const fresh = !morphTo && x >= freshFromCol && x < Math.floor((filledBuckets / buckets) * cols);
+    const peakAmp = Math.max(0.6, pk * height);
     g.globalAlpha = fresh ? 0.5 : 0.3;
     g.fillStyle = fresh ? flare : text;
-    g.fillRect(x, mid - peakAmp, bodyW, peakAmp * 2);
-    const rmsAmp = Math.max(0.6, track.peaks[b * 2 + 1] * height * 1.6);
+    g.fillRect(px, mid - peakAmp, 1, peakAmp * 2);
+    const rmsAmp = Math.max(0.6, rms * height * 1.6);
     g.globalAlpha = 1;
-    g.fillRect(x, mid - rmsAmp, bodyW, rmsAmp * 2);
+    g.fillRect(px, mid - rmsAmp, 1, rmsAmp * 2);
   }
   g.globalAlpha = 1;
 
@@ -973,6 +1165,8 @@ function renderRuler(info: PlanInfo): void {
 }
 
 let shownSection = "";
+/** so a boundary crossing knows which way the playhead was going */
+let lastMarkPos = 0;
 
 /**
  * One name at a time, swapped as the playhead crosses a boundary, so the
@@ -999,17 +1193,25 @@ function highlightMark(pos: number): void {
     }
   }
   if (current && current !== shownSection) {
+    // Tied to the playhead's direction of travel: the outgoing name leaves the
+    // way the playhead is going and the incoming one follows it in, so the
+    // structure reads as something moving past rather than a label swapped.
+    const forward = pos >= lastMarkPos;
     shownSection = current;
     if (reducedMotion) {
       elNow.textContent = current;
     } else {
-      elNow.classList.add("swap");
+      elNow.dataset.dir = forward ? "fwd" : "back";
+      elNow.classList.add("leaving");
       window.setTimeout(() => {
         elNow.textContent = current;
-        elNow.classList.remove("swap");
-      }, 150);
+        elNow.classList.remove("leaving");
+        elNow.classList.add("entering");
+        window.setTimeout(() => elNow.classList.remove("entering"), 20);
+      }, 130);
     }
   }
+  lastMarkPos = pos;
 }
 
 function prettyScale(name: string): string {
@@ -1098,6 +1300,9 @@ function renderLanes(info: PlanInfo): void {
     if (lane) {
       lane.dataset.keep = String(kept);
       lane.dataset.solo = String(solo?.bus === bus);
+      // still waiting for this bus to render: the lane says soloed, but the
+      // audio has not arrived yet, and saying so is better than looking stuck
+      lane.dataset.pending = String(solo?.bus === bus && solo.started === false && !solo.audio.complete);
       // any lane recedes while another is soloed
       lane.dataset.muted = String(solo !== null && solo.bus !== bus);
       lane.querySelector(".lane-keep")?.setAttribute("aria-pressed", String(kept));
@@ -1158,6 +1363,10 @@ function drawLane(bus: string, info: PlanInfo): void {
     if (drawn <= 0) continue;
     g.fillRect(x, y - 3, drawn, 8);
   }
+  if (lanePlayhead >= 0) {
+    g.fillStyle = css.getPropertyValue("--flare").trim();
+    g.fillRect(Math.round(lanePlayhead * w), y - 7, 1, 16);
+  }
 }
 
 /**
@@ -1171,6 +1380,14 @@ function drawLane(bus: string, info: PlanInfo): void {
  */
 function toggleSolo(bus: string): void {
   if (!track) return;
+  // Mark it in this frame. Everything below - cancelling the old audition,
+  // posting to the worker, restarting playback - happens after the browser has
+  // already shown that the tap landed.
+  const row = elLanes.querySelector<HTMLElement>(`.lane[data-bus="${bus}"]`);
+  if (row) {
+    row.dataset.solo = String(solo?.bus !== bus);
+    row.dataset.pending = String(solo?.bus !== bus);
+  }
   const leaving = solo !== null && solo.bus === bus;
   const pos = currentSample();
 
@@ -1181,6 +1398,8 @@ function toggleSolo(bus: string): void {
   if (leaving) {
     solo = null;
     renderLanes(track.info);
+    carryCols = null; // the mix is rendered already: nothing to carry
+    retarget(true); // morph back to the full mix
     stopPlayback();
     // The mix is rendered this far already, so it can pick up where the solo
     // left off rather than starting over.
@@ -1191,6 +1410,7 @@ function toggleSolo(bus: string): void {
     return;
   }
 
+  const chunks = Math.ceil(track.info.totalSamples / track.info.chunkSize);
   solo = {
     bus,
     started: false,
@@ -1199,9 +1419,17 @@ function toggleSolo(bus: string): void {
       right: new Float32Array(track.info.totalSamples),
       filled: 0,
       complete: false,
+      peaks: new Float32Array(chunks * PEAKS_PER_CHUNK * 2),
     },
   };
   renderLanes(track.info);
+  // The waveform morphs to the soloed bus - which is also the fix for the
+  // reported defect: while soloed it used to keep showing the full mix, so a
+  // part that is silent in a section looked the same as a broken solo. The
+  // soloed bus renders left to right like any other, so the mix is carried in
+  // the columns it has not reached and replaced as it arrives.
+  carryShownShape();
+  retarget(true);
   // stopPlayback, not stopSources: leaving the pump running would let it
   // schedule against the OLD anchor while the new source has nothing in it -
   // which computed a negative `when` and threw out of the audio path.
@@ -1225,14 +1453,43 @@ function toggleSolo(bus: string): void {
 /** A soloed chunk. Same shape as a mix chunk, into the audition buffer. */
 function appendSoloChunk(gen: number, start: number, count_: number, left: ArrayBuffer, right: ArrayBuffer): void {
   if (gen !== soloGen || !solo || !track) return;
-  solo.audio.left.set(new Float32Array(left), start);
-  solo.audio.right.set(new Float32Array(right), start);
+  const sl = new Float32Array(left);
+  const sr2 = new Float32Array(right);
+  solo.audio.left.set(sl, start);
+  solo.audio.right.set(sr2, start);
   solo.audio.filled = start + count_;
+  // Peaks for the arrived chunk, the same shape the worker sends for the mix.
+  // Without these the waveform kept showing the full mix while a bus was
+  // soloed, so a part that is silent here looked identical to a broken solo -
+  // the defect this closes.
+  const chunkIndex = Math.round(start / track.info.chunkSize);
+  const per = Math.ceil(count_ / PEAKS_PER_CHUNK);
+  for (let i = 0; i < PEAKS_PER_CHUNK; i++) {
+    let pk = 0;
+    let sum = 0;
+    let n = 0;
+    for (let j = i * per; j < (i + 1) * per && j < count_; j++) {
+      const a = Math.abs(sl[j]);
+      const b = Math.abs(sr2[j]);
+      const m = a > b ? a : b;
+      if (m > pk) pk = m;
+      sum += sl[j] * sl[j] + sr2[j] * sr2[j];
+      n += 2;
+    }
+    const at = (chunkIndex * PEAKS_PER_CHUNK + i) * 2;
+    if (at + 1 < solo.audio.peaks.length) {
+      solo.audio.peaks[at] = pk;
+      solo.audio.peaks[at + 1] = n > 0 ? Math.sqrt(sum / n) : 0;
+    }
+  }
   // Start once, on the first chunk past the prebuffer. Gating on the
   // "buffering" state alone would restart playback every time the underrun
   // path re-entered that state, which stuttered the first quarter second.
+  retarget(true);
   if (!solo.started && solo.audio.filled / track.info.sampleRate >= PREBUFFER_SECONDS) {
     solo.started = true;
+    const row = elLanes.querySelector<HTMLElement>(`.lane[data-bus="${solo.bus}"]`);
+    if (row) row.dataset.pending = "false";
     void beginPlayback(0);
   } else if (state === "playing" || state === "buffering") {
     scheduleReady();
@@ -1264,6 +1521,23 @@ function maybeShowHint(): void {
     learned = false;
   }
   elHint.hidden = learned;
+}
+
+/**
+ * The playhead, drawn across every lane row.
+ *
+ * The lanes already show where each part plays; without a playhead there is no
+ * way to relate that to what you are hearing. Drawn on the lane canvases that
+ * already exist, so it costs one line per row and no new elements.
+ */
+let lanePlayhead = -1;
+function drawLanePlayhead(pos: number): void {
+  if (!track) return;
+  const at = track.info.totalSamples > 0 ? pos / track.info.totalSamples : 0;
+  // only redraw when the head has actually moved a pixel
+  if (Math.abs(at - lanePlayhead) < 0.0015) return;
+  lanePlayhead = at;
+  for (const bus of track.info.buses) drawLane(bus, track.info);
 }
 
 function toggleLock(bus: string): void {

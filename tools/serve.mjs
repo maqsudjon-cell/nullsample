@@ -12,6 +12,7 @@ const TYPES = {
   ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png",
   ".ico": "image/x-icon", ".xml": "application/xml", ".txt": "text/plain; charset=utf-8",
   ".webmanifest": "application/manifest+json", ".wav": "audio/wav",
+  ".mp3": "audio/mpeg", ".mid": "audio/midi", ".zip": "application/zip",
 };
 
 createServer((req, res) => {

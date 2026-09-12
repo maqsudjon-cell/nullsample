@@ -31,7 +31,8 @@
     "effects": "node cli/effects.ts",
     "masking": "node cli/masking.ts",
     "tune": "node cli/tune.ts",
-    "drumbatch": "node cli/drumbatch.ts"
+    "drumbatch": "node cli/drumbatch.ts",
+    "test:motion": "node test/browser-motion.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

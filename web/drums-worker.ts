@@ -30,7 +30,12 @@ export type ToDrumWorker =
   | ({ type: "export"; what: "wav" | "oneshots" | "midi" } & DrumRequest);
 
 export type FromDrumWorker =
-  | { type: "loop"; gen: number; only?: DrumGroup; left: ArrayBuffer; right: ArrayBuffer; sampleRate: number; hits: number; ms: number }
+  | {
+      type: "loop"; gen: number; only?: DrumGroup;
+      left: ArrayBuffer; right: ArrayBuffer; sampleRate: number; hits: number; ms: number;
+      /** where each voice first lands, as a fraction of the loop */
+      firstHit: Record<string, number>;
+    }
   | { type: "export"; gen: number; what: "wav" | "oneshots" | "midi"; bytes: ArrayBuffer; name: string }
   | { type: "error"; gen: number; message: string };
 
@@ -53,8 +58,17 @@ self.onmessage = (e: MessageEvent<ToDrumWorker>) => {
       const loop = renderDrumLoop(options(msg, msg.only));
       const left = loop.audio.L.slice().buffer as ArrayBuffer;
       const right = loop.audio.R.slice().buffer as ArrayBuffer;
+      const steps = loop.bars * 16;
+      const firstHit: Record<string, number> = {};
+      for (const h of loop.hits) {
+        if (firstHit[h.voice] === undefined) firstHit[h.voice] = h.step / steps;
+      }
       post(
-        { type: "loop", gen: msg.gen, only: msg.only, left, right, sampleRate: loop.audio.sampleRate, hits: loop.hits.length, ms: performance.now() - t0 },
+        {
+          type: "loop", gen: msg.gen, only: msg.only, left, right,
+          sampleRate: loop.audio.sampleRate, hits: loop.hits.length,
+          ms: performance.now() - t0, firstHit,
+        },
         [left, right],
       );
       return;
