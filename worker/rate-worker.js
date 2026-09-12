@@ -150,6 +150,35 @@ export default {
       return json({ batchId: batch, count: out.length, fromIndex: lateCount, ratings: out });
     }
 
+    // --- which batches does this Worker actually hold? ---------------------
+    //
+    // So a tool that finds no ratings can say what it looked for AND what is
+    // there, instead of "no ratings found" with no id.
+    if (request.method === "GET" && url.pathname === "/batches") {
+      const counts = {};
+      let cursor;
+      do {
+        const page = await env.RATINGS.list({ prefix: "rating:", cursor });
+        for (const k of page.keys) {
+          const id = k.name.slice("rating:".length).split(":")[0];
+          counts[id] = (counts[id] ?? 0) + 1;
+        }
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+      // recent writes may not be in list() yet; fold in the index too
+      let idx;
+      do {
+        const page = await env.RATINGS.list({ prefix: "recent:", cursor: idx });
+        for (const k of page.keys) {
+          const id = k.name.slice("recent:".length);
+          const keys = (await env.RATINGS.get(k.name, "json")) ?? [];
+          counts[id] = Math.max(counts[id] ?? 0, keys.length);
+        }
+        idx = page.list_complete ? undefined : page.cursor;
+      } while (idx);
+      return json({ batches: Object.entries(counts).map(([id, ratings]) => ({ id, ratings })) });
+    }
+
     // --- ask whether a new cycle should run --------------------------------
     //
     // Called by the phone after a rating lands. The Worker holds the GitHub
