@@ -380,6 +380,31 @@ try {
     await page.close();
   }
 
+  // -- 5c - /drums morphs too ---------------------------------------------
+  console.log("\n/drums waveform");
+  {
+    const page = await phonePage();
+    await settledTrack(page, `${BASE}/drums/`);
+    const reroll = motion(await page.evaluate(`(() => {
+      document.getElementById('generate').click();
+      return window.__probe.over('#scope', 1600);
+    })()`));
+    console.log(`  reroll: shape moved ${reroll.travelled} per column over ${reroll.frames} frames`);
+    check("a drum reroll morphs", reroll.travelled > 0.05 && reroll.worstStep < 0.3,
+      `moved ${reroll.travelled}, worst frame ${(reroll.worstStep * 100).toFixed(0)}% of the path`);
+    check("no blank frame on a drum reroll", !reroll.everBlank);
+    const group = await page.evaluate(`document.querySelector('button.lane-solo').dataset.group`);
+    const solo = motion(await page.evaluate(`(() => {
+      document.querySelector('button.lane-solo').click();
+      return window.__probe.over('#scope', 2000);
+    })()`));
+    console.log(`  solo ${group}: shape moved ${solo.travelled} per column over ${solo.frames} frames`);
+    check("soloing a drum group morphs", solo.travelled > 0.05 && solo.worstStep < 0.3,
+      `moved ${solo.travelled}, worst frame ${(solo.worstStep * 100).toFixed(0)}% of the path`);
+    check("no blank frame on a drum solo", !solo.everBlank);
+    await page.close();
+  }
+
   // -- 6 - /drums one-shots emerge from the loop --------------------------
   console.log("\n/drums one-shots");
   {

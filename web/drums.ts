@@ -120,13 +120,15 @@ function onMessage(msg: FromDrumWorker): void {
       for (const id of ["dl-wav", "dl-kit", "dl-midi"]) ($(id) as HTMLButtonElement).disabled = false;
       ($("play") as HTMLButtonElement).disabled = false;
       $("generate").textContent = "REROLL";
-      drawScope(buf);
       showHintOnce();
     }
-    // play whichever buffer the audition currently wants
+    // draw and play whichever buffer the audition currently wants
     const want = solo ?? "full";
     if ((msg.only ?? "full") === want) {
       setLabel("");
+      // The shape travels into the new loop rather than being replaced by it,
+      // and for a solo that is also what makes a silent part look silent.
+      setShape(buf);
       play(buf);
     }
     return;
@@ -208,7 +210,7 @@ function stop(): void {
   $("play").textContent = "▶";
   $("play").setAttribute("aria-label", "Play");
   cancelAnimationFrame(raf);
-  drawScope(buffers.get(solo ?? "full") ?? null, -1);
+  drawScope(-1);
 }
 
 // ------------------------------------------------------------- generate -
@@ -297,6 +299,7 @@ function toggleSolo(g: Group): void {
   const want = solo ?? "full";
   const cached = buffers.get(want);
   if (cached) {
+    setShape(cached);
     play(cached);
     return;
   }
@@ -389,7 +392,106 @@ function buildWords(): void {
 
 // ---------------------------------------------------------------- scope -
 
-function drawScope(buf: AudioBuffer | null, head = -1): void {
+// ------------------------------------------------------------------ morph -
+
+/**
+ * The waveform is one object that changes shape, the same as on /generate.
+ *
+ * Simpler here: a loop renders whole rather than in chunks, so there is never a
+ * half-arrived shape to carry - the old one holds until the new one exists,
+ * then travels into it. A reroll and a solo are the same operation.
+ */
+const MORPH_MS = 400;
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+let shownCols: Float32Array | null = null;
+let morphFrom: Float32Array | null = null;
+let morphTo: Float32Array | null = null;
+let morphStart = 0;
+let colCount = 0;
+/** the buffer the current shape was taken from, so a resize can retake it */
+let shapeOf: AudioBuffer | null = null;
+let morphRaf = 0;
+
+/** One peak per pixel column - the width of the canvas, not of the buffer. */
+function columnsOf(buf: AudioBuffer | null, cols: number): Float32Array {
+  const out = new Float32Array(cols);
+  if (!buf || cols <= 0) return out;
+  const d = buf.getChannelData(0);
+  const per = Math.max(1, Math.floor(d.length / cols));
+  for (let x = 0; x < cols; x++) {
+    let pk = 0;
+    const o = x * per;
+    for (let i = 0; i < per; i += 8) {
+      const a = Math.abs(d[o + i] ?? 0);
+      if (a > pk) pk = a;
+    }
+    out[x] = pk;
+  }
+  return out;
+}
+
+/** Points the waveform at a buffer: morphs into its shape over MORPH_MS. */
+function setShape(buf: AudioBuffer | null): void {
+  shapeOf = buf;
+  if (colCount <= 0) return;
+  const target = columnsOf(buf, colCount);
+  if (reducedMotion || !shownCols || shownCols.length !== target.length) {
+    shownCols = target;
+    morphTo = null;
+    morphFrom = null;
+    return;
+  }
+  if (morphTo) {
+    morphTo = target; // already moving: aim at the newer shape
+    return;
+  }
+  morphFrom = shownCols.slice();
+  morphTo = target;
+  morphStart = performance.now();
+  runMorph();
+}
+
+/** Advances the morph. Returns true while it is still moving. */
+function stepMorph(now: number): boolean {
+  if (!morphTo || !morphFrom || !shownCols) return false;
+  const t = Math.min(1, (now - morphStart) / MORPH_MS);
+  const k = ease(t);
+  for (let i = 0; i < shownCols.length; i++) {
+    shownCols[i] = morphFrom[i] + (morphTo[i] - morphFrom[i]) * k;
+  }
+  if (t >= 1) {
+    shownCols = morphTo;
+    morphTo = null;
+    morphFrom = null;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * The morph's own frames. A reroll or a solo can happen while nothing is
+ * playing, so it cannot rely on the transport clock - and it stops the moment
+ * the shape has settled, so nothing moves while nothing is happening.
+ */
+function runMorph(): void {
+  if (morphRaf !== 0) return;
+  const tick = () => {
+    const moving = stepMorph(performance.now());
+    drawScope(playhead());
+    morphRaf = moving ? requestAnimationFrame(tick) : 0;
+  };
+  morphRaf = requestAnimationFrame(tick);
+}
+
+/** Where the head is now, or -1 when nothing is playing. */
+function playhead(): number {
+  if (!ctx || !source || !source.buffer || reducedMotion) return -1;
+  const len = source.buffer.duration;
+  return len > 0 ? ((ctx.currentTime - startedAt) % len) / len : 0;
+}
+
+function drawScope(head = -1): void {
   const c = $("scope") as unknown as HTMLCanvasElement;
   const g = c.getContext("2d");
   if (!g) return;
@@ -400,24 +502,31 @@ function drawScope(buf: AudioBuffer | null, head = -1): void {
     c.width = Math.round(w * dpr);
     c.height = Math.round(h * dpr);
   }
+  const cols = Math.max(1, Math.round(w));
+  if (colCount !== cols) {
+    // a resize changes the column count, and nothing can interpolate between
+    // arrays of different lengths - retake the shape at the new width
+    colCount = cols;
+    shownCols = columnsOf(shapeOf, cols);
+    morphTo = null;
+    morphFrom = null;
+  }
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
   const css = getComputedStyle(document.documentElement);
   const mid = h / 2;
   g.fillStyle = css.getPropertyValue("--text").trim();
-  if (buf) {
-    const d = buf.getChannelData(0);
-    const per = Math.max(1, Math.floor(d.length / w));
-    for (let x = 0; x < w; x++) {
-      let pk = 0;
-      const o = x * per;
-      for (let i = 0; i < per; i += 8) {
-        const a = Math.abs(d[o + i] ?? 0);
-        if (a > pk) pk = a;
-      }
+  let ink = 0;
+  if (shownCols) {
+    for (let x = 0; x < colCount; x++) {
+      const pk = shownCols[x];
+      if (pk <= 0) continue;
+      ink++;
       const hh = Math.max(1, pk * (h * 0.44));
       g.fillRect(x, mid - hh, 1, hh * 2);
     }
+  }
+  if (ink > 0) {
     // bar lines, faint: a loop is read in bars
     g.fillStyle = css.getPropertyValue("--line-hi").trim();
     for (let b = 1; b < bars; b++) g.fillRect(Math.round((b / bars) * w), 0, 1, h);
@@ -435,9 +544,7 @@ function startClock(): void {
   cancelAnimationFrame(raf);
   const tick = () => {
     if (!ctx || !source || !source.buffer) return;
-    const len = source.buffer.duration;
-    const pos = len > 0 ? ((ctx.currentTime - startedAt) % len) / len : 0;
-    drawScope(source.buffer, reducedMotion ? -1 : pos);
+    drawScope(playhead());
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
@@ -455,7 +562,7 @@ for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>(".bars b
 buildWords();
 renderLanes();
 setLabel("");
-drawScope(null);
+drawScope();
 
 $("generate").addEventListener("click", () => {
   audio();
@@ -521,7 +628,7 @@ document.addEventListener("click", (e) => {
   const m = $("dlmenu") as HTMLDetailsElement;
   if (m.open && !m.contains(e.target as Node)) m.open = false;
 });
-window.addEventListener("resize", () => drawScope(buffers.get(solo ?? "full") ?? null));
+window.addEventListener("resize", () => drawScope(playhead()));
 
 if (arrived) generate(false);
 

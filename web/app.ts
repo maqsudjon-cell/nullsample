@@ -183,6 +183,37 @@ function carryShownShape(): void {
   carryCols = shownCols && colCount > 0 ? shownCols.slice() : null;
 }
 
+/**
+ * The same shape at a different canvas width.
+ *
+ * A width change used to rebuild the shape from the audition source, which is
+ * empty for the first few hundred milliseconds of a solo - so a one-pixel
+ * layout shift mid-solo blanked the waveform for a frame. Stretching what is
+ * already on screen keeps it the same object across a resize, which is also
+ * what a window drag should look like.
+ */
+function rescaleCols(src: Float32Array | null, cols: number): Float32Array | null {
+  if (!src || cols <= 0) return null;
+  const was = src.length / 2;
+  if (was === cols) return src;
+  const out = new Float32Array(cols * 2);
+  for (let x = 0; x < cols; x++) {
+    const from = Math.floor((x / cols) * was);
+    const to = Math.max(from + 1, Math.floor(((x + 1) / cols) * was));
+    let pk = 0;
+    let rms = 0;
+    let n = 0;
+    for (let b = from; b < to && b < was; b++) {
+      if (src[b * 2] > pk) pk = src[b * 2];
+      rms += src[b * 2 + 1];
+      n++;
+    }
+    out[x * 2] = pk;
+    out[x * 2 + 1] = n > 0 ? rms / n : 0;
+  }
+  return out;
+}
+
 /** Starts a morph from whatever is on screen toward the given shape. */
 function morphTowards(target: Float32Array): void {
   if (reducedMotion || !shownCols || shownCols.length !== target.length) {
@@ -1098,10 +1129,13 @@ function drawScope(playhead = -1): void {
   // --flare and settle to --text, so the drawing-in IS the render.
   const cols = Math.max(1, Math.floor(plotW));
   if (colCount !== cols) {
+    // stretch what is on screen rather than rebuilding it: see rescaleCols
+    const held = rescaleCols(shownCols, cols);
     colCount = cols;
-    shownCols = columnsOf(auditioned(), cols);
-    morphTo = null;
-    morphFrom = null;
+    carryCols = rescaleCols(carryCols, cols);
+    morphFrom = rescaleCols(morphFrom, cols);
+    morphTo = rescaleCols(morphTo, cols);
+    shownCols = held ?? columnsOf(auditioned(), cols);
   }
   if (!shownCols) shownCols = columnsOf(auditioned(), cols);
   const freshFromCol = reducedMotion
