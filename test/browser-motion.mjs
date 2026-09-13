@@ -21,7 +21,9 @@ import { existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
 
 const PORT = Number(process.env.MOTION_PORT || 4399);
-const BASE = `http://localhost:${PORT}`;
+/** Point MOTION_BASE at the deployed site to run these against what shipped. */
+const BASE = process.env.MOTION_BASE || `http://localhost:${PORT}`;
+const LOCAL = !process.env.MOTION_BASE;
 const ROOT = new URL("..", import.meta.url).pathname;
 
 function findChrome() {
@@ -129,16 +131,19 @@ if (!chrome) {
   console.error("no Chrome found; set CHROME_PATH");
   process.exit(1);
 }
-if (!existsSync(`${ROOT}dist/generate/index.html`)) {
+if (LOCAL && !existsSync(`${ROOT}dist/generate/index.html`)) {
   console.error("dist/ is not built; run npm run build first");
   process.exit(1);
 }
+console.log(`measuring ${BASE}`);
 
-const server = spawn(process.execPath, [`${ROOT}tools/serve.mjs`], {
-  env: { ...process.env, PORT: String(PORT) },
-  stdio: "ignore",
-});
-await sleep(400);
+const server = LOCAL
+  ? spawn(process.execPath, [`${ROOT}tools/serve.mjs`], {
+      env: { ...process.env, PORT: String(PORT) },
+      stdio: "ignore",
+    })
+  : null;
+if (LOCAL) await sleep(400);
 
 const browser = await puppeteer.launch({
   executablePath: chrome,
@@ -154,12 +159,17 @@ async function phonePage(reduced = false) {
   return page;
 }
 
-async function settledTrack(page, url = `${BASE}/generate/`) {
+async function settledTrack(page, url = `${BASE}/generate/`, whole = false) {
   await page.goto(url, { waitUntil: "load" });
   await page.evaluate(PROBE);
   await page.click("#generate");
   await page.waitForFunction(() => document.getElementById("generate").textContent === "REROLL", { timeout: 60000 });
-  // wait for the render to stop growing
+  if (whole) {
+    // the download button enables when the render finishes, which is the only
+    // honest signal that nothing more is going to arrive
+    await page.waitForFunction(() => !document.getElementById("wav").disabled, { timeout: 120000 });
+  }
+  // wait for the shape to stop growing
   let last = -1;
   for (let i = 0; i < 60; i++) {
     await sleep(250);
@@ -236,7 +246,20 @@ try {
     const mix = await page.evaluate(`window.__probe.shape('#scope')`);
     const buses = await page.evaluate(`Array.from(document.querySelectorAll('.lane-solo')).map(b => b.dataset.bus)`);
     const bus = buses.includes("lead") ? "lead" : buses[1];
-    await page.evaluate(`document.querySelector('.lane-solo[data-bus="${bus}"]').click()`);
+    // The press must be answered before any audio work starts, so read the row
+    // back in the same task as the click - nothing has had a chance to yield.
+    const sameFrame = await page.evaluate(`(() => {
+      const row = document.querySelector('.lane[data-bus="${bus}"]');
+      document.querySelector('.lane-solo[data-bus="${bus}"]').click();
+      return { solo: row.dataset.solo, pending: row.dataset.pending };
+    })()`);
+    check("a lane press marks itself in the same task", sameFrame.solo === "true" && sameFrame.pending === "true",
+      `data-solo=${sameFrame.solo} data-pending=${sameFrame.pending}`);
+    const active = await page.evaluate(`(() => {
+      const sheets = Array.from(document.styleSheets).flatMap(s => { try { return Array.from(s.cssRules); } catch { return []; } });
+      return sheets.filter(r => r.selectorText && /:active/.test(r.selectorText)).length;
+    })()`);
+    check("controls have a pressed state in CSS", active > 0, `${active} :active rules`);
     const samples = await page.evaluate(`window.__probe.over('#scope', 2500)`);
     const m = motion(samples);
     console.log(`  soloed ${bus}: ink ${m.firstInk} -> ${m.lastInk} over ${m.frames} frames; shape moved ${m.travelled} per column`);
@@ -344,6 +367,19 @@ try {
     await page.close();
   }
 
+  // -- 5b - nothing moves while nothing is happening ----------------------
+  console.log("\nstopped");
+  {
+    const page = await phonePage();
+    await settledTrack(page, `${BASE}/generate/`, true);
+    await page.evaluate(`(() => { const b = document.getElementById('play'); if (b.textContent !== '\u25b6') b.click(); })()`);
+    await sleep(700); // let any morph in flight settle
+    const samples = await page.evaluate(`window.__probe.over('#scope', 800)`);
+    const m = motion(samples);
+    check("the waveform is still while the audio is stopped", m.path < 0.01, `path ${m.path} per column over ${m.frames} frames`);
+    await page.close();
+  }
+
   // -- 6 - /drums one-shots emerge from the loop --------------------------
   console.log("\n/drums one-shots");
   {
@@ -390,7 +426,7 @@ try {
   }
 } finally {
   await browser.close();
-  server.kill();
+  server?.kill();
 }
 
 console.log(failures === 0 ? "\nmotion: all checks passed" : `\nmotion: ${failures} check(s) failed`);
