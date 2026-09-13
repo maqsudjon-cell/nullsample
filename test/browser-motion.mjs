@@ -365,6 +365,26 @@ try {
     // happen is a 400ms interpolation
     check("no morph runs", m.moving <= 3, `${m.moving} of ${m.frames} frames carried movement`);
     await page.close();
+
+    // /drums has its own morph and its own emerging rows: both must be off too
+    const drums = await phonePage(true);
+    await settledTrack(drums, `${BASE}/drums/`);
+    const dm = motion(await drums.evaluate(`(() => {
+      document.getElementById('generate').click();
+      return window.__probe.over('#scope', 1600);
+    })()`));
+    check("no morph on /drums either", dm.moving <= 3, `${dm.moving} of ${dm.frames} frames carried movement`);
+    const rows = await drums.evaluate(`(async () => {
+      document.getElementById('download').click();
+      while (!document.querySelector('#shots li')) await new Promise(r => requestAnimationFrame(r));
+      return Array.from(document.querySelectorAll('#shots li')).map(li => {
+        const m = new DOMMatrix(getComputedStyle(li).transform);
+        return +Math.hypot(m.m41, m.m42).toFixed(1);
+      });
+    })()`);
+    check("one-shot rows are placed, not flown in", rows.every((d) => d === 0),
+      `${rows.length} rows, max offset ${Math.max(...rows, 0)}px`);
+    await drums.close();
   }
 
   // -- 5b - nothing moves while nothing is happening ----------------------
