@@ -33,7 +33,8 @@
     "tune": "node cli/tune.ts",
     "drumbatch": "node cli/drumbatch.ts",
     "test:motion": "node test/browser-motion.mjs",
-    "verify:live": "node tools/verify-live.mjs"
+    "verify:live": "node tools/verify-live.mjs",
+    "dataset": "node cli/dataset.ts"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

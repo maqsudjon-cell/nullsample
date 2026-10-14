@@ -72,6 +72,17 @@ npm run stems  -- --seed 42 --out stems-42.zip
 npm run bench
 ```
 
+### The open dataset
+
+```bash
+npm run dataset -- --out ./dataset     # the 20 demo seeds: mix, six stems, MIDI, exact annotations
+node cli/dataset-card.ts ./dataset     # its Hugging Face card
+```
+
+Published as [Nullsample Multitrack](https://huggingface.co/datasets/Maqsudjonpolatov/nullsample-multitrack)
+on Hugging Face. The labels are the score the audio came from, so tempo, chords, drum hits and notes are
+exact.
+
 ### The quality loop
 
 This is the mechanism that makes the output good, and it is not optional

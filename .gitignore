@@ -15,3 +15,4 @@ brand/out/*
 # `npm run batch -- --rebuild` reproduces it byte-identically from the ranges
 # snapshot inside manifest.json, which is the only part that is committed.
 web/rate/batch/*.mp3
+/dataset/
