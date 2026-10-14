@@ -122,7 +122,7 @@ checkout above has the same engine plus the script that wrote this dataset.
 |---|---|
 | \`mix/<seed>.mp3\` | the track, MP3 192 kbps, 44.1 kHz stereo |
 | \`mix/metadata.csv\` | one row per track: tempo, key, scale, bars, length, form, sections, chords. The viewer reads it. |
-| \`stems/<seed>/{drums,bass808,lead,arp,pads,fx}.mp3\` | each part rendered on its own, MP3 128 kbps |
+| \`stems/{drums,bass808,lead,arp,pads,fx}/<seed>.mp3\` | each part rendered on its own, MP3 128 kbps |
 | \`annotations/<seed>.json\` | the labels, times in seconds |
 | \`midi/<seed>.mid\` | the same notes as a Standard MIDI File |
 

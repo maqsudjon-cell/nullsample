@@ -8,7 +8,7 @@
  * about it: tempo, key, chords, sections, every drum hit by instrument, every note of every bus.
  * Writes, per seed:
  *   mix/<seed>.mp3              the track (MP3 192k; the lossless WAV is `npm run render -- --seed`)
- *   stems/<seed>/<bus>.mp3      each bus rendered on its own (MP3 128k)
+ *   stems/<bus>/<seed>.mp3      each bus rendered on its own (MP3 128k)
  *   annotations/<seed>.json     the labels, in seconds
  *   midi/<seed>.mid             the same notes as a Standard MIDI File, drums on channel 10
  * and mix/metadata.csv, which Hugging Face's audio viewer reads.
@@ -157,10 +157,10 @@ for (const [i, seed] of seeds.entries()) {
   const mix = renderTrack({ seed, preset, ranges, sampleRate });
   const p = mix.plan;
   mp3(encodeWav(mix.audio, 16), join(out, "mix", `${seed}.mp3`), 192, `Nullsample ${seed}`, seed);
-  mkdirSync(join(out, "stems", seed), { recursive: true });
   for (const bus of BUS_NAMES) {
+    mkdirSync(join(out, "stems", bus), { recursive: true });
     const r = renderStem({ seed, preset, ranges, sampleRate }, bus);
-    mp3(encodeWav(r.audio, 16), join(out, "stems", seed, `${bus}.mp3`), 128, `Nullsample ${seed} — ${bus}`, seed);
+    mp3(encodeWav(r.audio, 16), join(out, "stems", bus, `${seed}.mp3`), 128, `Nullsample ${seed} — ${bus}`, seed);
   }
   const a = annotate(p);
   writeFileSync(join(out, "annotations", `${seed}.json`), JSON.stringify(a, null, 1));
